@@ -1,25 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-export default function ParentPayments() {
+export default function PlayerPayments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["invoices"],
+    queryKey: ["my-invoices"],
     queryFn: async () => (await api.invoices.list()).data,
   });
 
   const payMutation = useMutation({
     mutationFn: ({ id }: { id: number }) => api.invoices.pay(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["my-invoices"] });
       toast({ title: "Payment recorded" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -33,7 +33,7 @@ export default function ParentPayments() {
 
   const statusColor: Record<string, string> = {
     paid: "bg-green-100 text-green-800",
-    unpaid: "bg-red-100 text-red-800",
+    pending: "bg-red-100 text-red-800",
     partial: "bg-yellow-100 text-yellow-800",
   };
 
@@ -41,7 +41,7 @@ export default function ParentPayments() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold">Payments</h1>
-        <p className="text-muted-foreground">View and pay invoices</p>
+        <p className="text-muted-foreground">View and pay your invoices</p>
       </div>
 
       {unpaid.length > 0 && (
@@ -60,9 +60,11 @@ export default function ParentPayments() {
                         <Badge variant="secondary" className={statusColor[inv.status] || ""}>{inv.status}</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {inv.player?.full_name} • Total: ${inv.amount.toFixed(2)} • Paid: ${inv.amount_paid.toFixed(2)} • Due: ${remaining.toFixed(2)}
+                        Total: ${inv.amount.toFixed(2)} • Paid: ${inv.amount_paid.toFixed(2)} • Due: ${remaining.toFixed(2)}
                       </p>
-                      {inv.due_date && <p className="text-xs text-muted-foreground">Due by {format(new Date(inv.due_date), "MMM d, yyyy")}</p>}
+                      {inv.due_date && (
+                        <p className="text-xs text-muted-foreground">Due by {format(new Date(inv.due_date), "MMM d, yyyy")}</p>
+                      )}
                     </div>
                     <Button onClick={() => payMutation.mutate({ id: inv.id })} disabled={payMutation.isPending}>
                       <CreditCard className="w-4 h-4 mr-2" /> Pay ${remaining.toFixed(2)}

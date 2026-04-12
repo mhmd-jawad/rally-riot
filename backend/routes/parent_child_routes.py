@@ -20,9 +20,14 @@ def link_child():
             {"field": "child_user_id", "message": "Child user ID must be an integer."}
         ])
 
-    parent_id = g.user["id"]
-    if g.user["role"] != "parent" and g.user["role"] != "admin":
-        return api_response.forbidden("Only parents or admins can link children.")
+    # Admin can specify the parent; a parent always links to themselves
+    if g.user["role"] == "admin" and data.get("parent_user_id"):
+        parent_id = data["parent_user_id"]
+        parent = User.query.get(parent_id)
+        if not parent or parent.role != "parent":
+            return api_response.bad_request("Specified user is not a parent.")
+    else:
+        parent_id = g.user["id"]
 
     child = User.query.get(child_user_id)
     if not child or child.role != "player":
@@ -44,13 +49,19 @@ def link_child():
 @authenticate
 @authorize("parent", "admin")
 def get_children():
-    parent_id = g.user["id"]
-    links = ParentChildLink.query.filter_by(parent_user_id=parent_id).all()
+    # Admin sees all links; parent sees only their own
+    if g.user["role"] == "admin":
+        links = ParentChildLink.query.all()
+    else:
+        links = ParentChildLink.query.filter_by(parent_user_id=g.user["id"]).all()
     result = []
     for link in links:
         d = link.to_dict()
         child = User.query.get(link.child_user_id)
+        parent = User.query.get(link.parent_user_id)
         if child:
             d["child"] = {"id": child.id, "full_name": child.full_name, "email": child.email, "role": child.role}
+        if parent:
+            d["parent"] = {"id": parent.id, "full_name": parent.full_name, "email": parent.email}
         result.append(d)
     return api_response.success(result)

@@ -7,8 +7,8 @@ import { format } from "date-fns";
 
 export default function CoachDashboard() {
   const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => (await api.teams.list()).data || [],
+    queryKey: ["my-teams"],
+    queryFn: async () => (await api.teams.myTeams()).data || [],
   });
 
   const { data: events = [] } = useQuery({

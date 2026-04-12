@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { format } from "date-fns";
 export default function PlayerDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: events = [] } = useQuery({
     queryKey: ["my-calendar"],
@@ -18,18 +20,19 @@ export default function PlayerDashboard() {
   });
 
   const { data: announcements = [] } = useQuery({
-    queryKey: ["announcements"],
+    queryKey: ["my-announcements"],
     queryFn: async () => (await api.announcements.list()).data || [],
   });
 
   const { data: notifications = [] } = useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["notifications", user?.id],
     queryFn: async () => (await api.notifications.list()).data || [],
+    enabled: !!user,
   });
 
   const rsvpMutation = useMutation({
     mutationFn: ({ eventId, status }: { eventId: number; status: string }) =>
-      api.rsvps.upsert({ event_id: eventId, player_user_id: 0, status }),
+      api.rsvps.upsert({ event_id: eventId, player_user_id: user!.id, status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-calendar"] });
       toast({ title: "RSVP updated" });

@@ -67,9 +67,24 @@ def list_announcements():
     if team_id:
         query = query.filter_by(team_id=team_id)
 
+    # Coaches only see announcements for their assigned teams
+    if g.user["role"] == "coach":
+        assignments = TeamCoach.query.filter_by(coach_user_id=g.user["id"]).all()
+        team_ids = [a.team_id for a in assignments]
+        query = query.filter(Announcement.team_id.in_(team_ids))
+
     # Players only see announcements for their teams
-    if g.user["role"] == "player":
+    elif g.user["role"] == "player":
         memberships = TeamPlayer.query.filter_by(player_user_id=g.user["id"]).all()
+        team_ids = [m.team_id for m in memberships]
+        query = query.filter(Announcement.team_id.in_(team_ids))
+
+    # Parents see announcements for their children's teams
+    elif g.user["role"] == "parent":
+        from models import ParentChildLink
+        links = ParentChildLink.query.filter_by(parent_user_id=g.user["id"]).all()
+        child_ids = [l.child_user_id for l in links]
+        memberships = TeamPlayer.query.filter(TeamPlayer.player_user_id.in_(child_ids)).all()
         team_ids = [m.team_id for m in memberships]
         query = query.filter(Announcement.team_id.in_(team_ids))
 

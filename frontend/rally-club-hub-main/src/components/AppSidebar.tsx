@@ -35,6 +35,8 @@ const parentItems = [
 const playerItems = [
   { title: "Dashboard", url: "/player", icon: LayoutDashboard },
   { title: "My Schedule", url: "/player/schedule", icon: Calendar },
+  { title: "Registration", url: "/player/registration", icon: FileText },
+  { title: "Payments", url: "/player/payments", icon: CreditCard },
 ];
 
 export function AppSidebar() {

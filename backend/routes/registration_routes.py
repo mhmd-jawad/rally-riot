@@ -80,7 +80,7 @@ def update_form(form_id):
 # ── Registrations ─────────────────────────────────────────────
 @registration_bp.route("/", methods=["POST"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def submit_registration():
     data = request.get_json(silent=True) or {}
     errors = []
@@ -132,6 +132,12 @@ def list_registrations():
     query = Registration.query
     if form_id:
         query = query.filter_by(form_id=form_id)
+    # Parents only see their own registrations
+    if g.user["role"] == "parent":
+        query = query.filter_by(parent_user_id=g.user["id"])
+    # Players only see their own registrations
+    elif g.user["role"] == "player":
+        query = query.filter_by(player_user_id=g.user["id"])
     registrations = query.order_by(Registration.created_at.desc()).all()
     return api_response.success([r.to_dict() for r in registrations])
 

@@ -15,7 +15,8 @@ export default function AdminFinance() {
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
   const invoices = data?.invoices || [];
-  const summary = data?.summary || { total: 0, paid: 0, unpaid: 0, total_amount: 0, total_paid: 0 };
+  const summary = data?.summary || { total: 0, total_amount: 0, total_paid: 0, total_outstanding: 0 };
+  const unpaidCount = invoices.filter((i: any) => i.status !== "paid").length;
 
   const statusColor: Record<string, string> = {
     paid: "bg-green-100 text-green-800",
@@ -33,7 +34,7 @@ export default function AdminFinance() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Revenue" value={`$${(summary.total_amount || 0).toFixed(2)}`} icon={DollarSign} />
         <StatCard title="Collected" value={`$${(summary.total_paid || 0).toFixed(2)}`} icon={TrendingUp} />
-        <StatCard title="Unpaid Invoices" value={summary.unpaid || 0} icon={AlertCircle} />
+        <StatCard title="Unpaid Invoices" value={unpaidCount} icon={AlertCircle} />
       </div>
 
       <Card>

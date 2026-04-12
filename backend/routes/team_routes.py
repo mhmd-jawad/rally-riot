@@ -39,6 +39,26 @@ def list_teams():
     return api_response.success([t.to_dict(include_members=True) for t in teams])
 
 
+@team_bp.route("/my", methods=["GET"])
+@authenticate
+def my_teams():
+    """Return only the teams the authenticated coach is assigned to."""
+    user_id = g.user["id"]
+    role = g.user["role"]
+    if role == "coach":
+        assignments = TeamCoach.query.filter_by(coach_user_id=user_id).all()
+        team_ids = [a.team_id for a in assignments]
+        teams = Team.query.filter(Team.id.in_(team_ids)).all()
+    elif role == "player":
+        assignments = TeamPlayer.query.filter_by(player_user_id=user_id).all()
+        team_ids = [a.team_id for a in assignments]
+        teams = Team.query.filter(Team.id.in_(team_ids)).all()
+    else:
+        # admin sees all
+        teams = Team.query.all()
+    return api_response.success([t.to_dict(include_members=True) for t in teams])
+
+
 @team_bp.route("/<int:team_id>", methods=["GET"])
 @authenticate
 def get_team(team_id):

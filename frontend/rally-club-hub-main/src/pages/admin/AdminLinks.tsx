@@ -25,7 +25,7 @@ export default function AdminLinks() {
   });
 
   const linkMutation = useMutation({
-    mutationFn: () => api.parentChild.link(Number(childId)),
+    mutationFn: () => api.parentChild.link(Number(childId), Number(parentId)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parent-child-links"] });
       toast({ title: "Link created" });

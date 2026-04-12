@@ -66,6 +66,7 @@ export const users = {
 // ── Teams ───────────────────────────────────────────────────
 export const teams = {
   list: () => request<{ success: boolean; data: any[] }>("/teams/"),
+  myTeams: () => request<{ success: boolean; data: any[] }>("/teams/my"),
   get: (id: number) => request<{ success: boolean; data: any }>(`/teams/${id}`),
   create: (data: { name: string; age_group?: string; skill_level?: string }) =>
     request("/teams/", { method: "POST", body: JSON.stringify(data) }),
@@ -84,10 +85,13 @@ export const teams = {
 // ── Parent-Child ────────────────────────────────────────────
 export const parentChild = {
   list: () => request<{ success: boolean; data: any[] }>("/parent-child/"),
-  link: (childUserId: number) =>
+  link: (childUserId: number, parentUserId?: number) =>
     request("/parent-child/", {
       method: "POST",
-      body: JSON.stringify({ child_user_id: childUserId }),
+      body: JSON.stringify({
+        child_user_id: childUserId,
+        ...(parentUserId ? { parent_user_id: parentUserId } : {}),
+      }),
     }),
 };
 
@@ -144,6 +148,8 @@ export const invoices = {
   get: (id: number) =>
     request<{ success: boolean; data: any }>(`/invoices/${id}`),
   markPaid: (id: number) =>
+    request(`/invoices/${id}/pay`, { method: "PATCH" }),
+  pay: (id: number) =>
     request(`/invoices/${id}/pay`, { method: "PATCH" }),
 };
 

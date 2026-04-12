@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { format } from "date-fns";
 export default function PlayerSchedule() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["my-calendar"],
@@ -18,7 +20,7 @@ export default function PlayerSchedule() {
 
   const rsvpMutation = useMutation({
     mutationFn: ({ eventId, status }: { eventId: number; status: string }) =>
-      api.rsvps.upsert({ event_id: eventId, player_user_id: 0, status }),
+      api.rsvps.upsert({ event_id: eventId, player_user_id: user!.id, status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-calendar"] });
       toast({ title: "RSVP updated" });

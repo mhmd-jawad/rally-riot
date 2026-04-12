@@ -40,13 +40,13 @@ class NotificationService:
         n = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
         if n:
             n.is_read = True
-            db.session.flush()
+            db.session.commit()
         return n
 
     @staticmethod
     def mark_all_read(user_id):
         count = Notification.query.filter_by(user_id=user_id, is_read=False).update({"is_read": True})
-        db.session.flush()
+        db.session.commit()
         return count
 
 

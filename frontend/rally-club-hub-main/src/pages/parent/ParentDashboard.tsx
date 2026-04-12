@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Calendar, DollarSign, Bell } from "lucide-react";
 import { format } from "date-fns";
 
 export default function ParentDashboard() {
+  const { user } = useAuth();
   const { data: children = [] } = useQuery({
     queryKey: ["my-children"],
     queryFn: async () => (await api.parentChild.list()).data || [],
@@ -22,8 +24,9 @@ export default function ParentDashboard() {
   });
 
   const { data: notifications = [] } = useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["notifications", user?.id],
     queryFn: async () => (await api.notifications.list()).data || [],
+    enabled: !!user,
   });
 
   const invoices = invoiceData?.invoices || [];

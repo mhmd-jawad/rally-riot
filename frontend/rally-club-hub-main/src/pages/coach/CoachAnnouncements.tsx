@@ -20,19 +20,19 @@ export default function CoachAnnouncements() {
   const [form, setForm] = useState({ title: "", message: "", team_id: "", priority: "normal" });
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => (await api.teams.list()).data || [],
+    queryKey: ["my-teams"],
+    queryFn: async () => (await api.teams.myTeams()).data || [],
   });
 
   const { data: announcements = [], isLoading } = useQuery({
-    queryKey: ["announcements"],
+    queryKey: ["my-announcements"],
     queryFn: async () => (await api.announcements.list()).data || [],
   });
 
   const createMutation = useMutation({
     mutationFn: () => api.announcements.create({ ...form, team_id: Number(form.team_id) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["my-announcements"] });
       toast({ title: "Announcement posted" });
       setOpen(false);
       setForm({ title: "", message: "", team_id: "", priority: "normal" });

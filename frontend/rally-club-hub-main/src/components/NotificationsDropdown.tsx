@@ -1,4 +1,4 @@
-import { Bell } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,11 +20,17 @@ export function NotificationsDropdown() {
     enabled: !!user,
   });
 
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] });
+
   const markRead = useMutation({
-    mutationFn: async (id: number) => {
-      await api.notifications.markRead(id);
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    mutationFn: (id: number) => api.notifications.markRead(id),
+    onSuccess: invalidate,
+  });
+
+  const markAllRead = useMutation({
+    mutationFn: () => api.notifications.markAllRead(),
+    onSuccess: invalidate,
   });
 
   const unreadCount = notifications.filter((n: any) => !n.is_read).length;
@@ -42,8 +48,19 @@ export function NotificationsDropdown() {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
-        <div className="p-3 border-b border-border">
+        <div className="p-3 border-b border-border flex items-center justify-between">
           <h4 className="font-semibold text-sm">Notifications</h4>
+          {unreadCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending}
+            >
+              <CheckCheck className="w-3 h-3 mr-1" /> Mark all read
+            </Button>
+          )}
         </div>
         <ScrollArea className="h-[300px]">
           {notifications.length === 0 ? (
@@ -52,7 +69,9 @@ export function NotificationsDropdown() {
             notifications.map((n: any) => (
               <div
                 key={n.id}
-                className={`p-3 border-b border-border/50 cursor-pointer hover:bg-muted/50 transition-colors ${!n.is_read ? "bg-accent/30" : ""}`}
+                className={`p-3 border-b border-border/50 cursor-pointer hover:bg-muted/50 transition-colors ${
+                  !n.is_read ? "bg-accent/30" : ""
+                }`}
                 onClick={() => !n.is_read && markRead.mutate(n.id)}
               >
                 <div className="flex items-start justify-between gap-2">

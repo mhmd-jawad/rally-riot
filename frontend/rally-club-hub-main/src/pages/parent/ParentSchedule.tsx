@@ -42,7 +42,7 @@ export default function ParentSchedule() {
   const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date());
   const pastEvents = events.filter((e: any) => new Date(e.start_time) < new Date());
 
-  const childId = selectedChild ? Number(selectedChild) : (children.length > 0 ? children[0].child_user_id : null);
+  const childId = selectedChild ? Number(selectedChild) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">

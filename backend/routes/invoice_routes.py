@@ -11,11 +11,13 @@ invoice_bp = Blueprint("invoices", __name__)
 
 @invoice_bp.route("/", methods=["GET"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def list_invoices():
-    """Get invoices. Parents see their own; admins see all."""
+    """Get invoices. Parents and players see their own; admins see all."""
     if g.user["role"] == "admin":
         invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
+    elif g.user["role"] == "player":
+        invoices = Invoice.query.filter_by(player_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
     else:
         invoices = Invoice.query.filter_by(parent_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
 
@@ -55,7 +57,7 @@ def get_invoice(invoice_id):
 
 @invoice_bp.route("/<int:invoice_id>/pay", methods=["PATCH"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def mark_paid(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
@@ -64,6 +66,10 @@ def mark_paid(invoice_id):
     if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
 
+    if g.user["role"] == "player" and inv.player_user_id != g.user["id"]:
+        return api_response.forbidden("Access denied.")
+
+    inv.amount_paid = inv.amount
     inv.status = "paid"
     db.session.commit()
     return api_response.success(inv.to_dict(), "Invoice marked as paid.")

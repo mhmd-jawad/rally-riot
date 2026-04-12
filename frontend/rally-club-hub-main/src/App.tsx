@@ -24,6 +24,8 @@ import ParentRegistration from "./pages/parent/ParentRegistration";
 import ParentPayments from "./pages/parent/ParentPayments";
 import PlayerDashboard from "./pages/player/PlayerDashboard";
 import PlayerSchedule from "./pages/player/PlayerSchedule";
+import PlayerRegistration from "./pages/player/PlayerRegistration";
+import PlayerPayments from "./pages/player/PlayerPayments";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,6 +68,8 @@ const App = () => (
             <Route element={<AppLayout allowedRoles={["player"]} />}>
               <Route path="/player" element={<PlayerDashboard />} />
               <Route path="/player/schedule" element={<PlayerSchedule />} />
+              <Route path="/player/registration" element={<PlayerRegistration />} />
+              <Route path="/player/payments" element={<PlayerPayments />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

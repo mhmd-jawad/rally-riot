@@ -29,8 +29,8 @@ export default function CoachEvents() {
   });
 
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["events"],
-    queryFn: async () => (await api.events.list()).data || [],
+    queryKey: ["my-events"],
+    queryFn: async () => (await api.events.myCalendar()).data || [],
   });
 
   const resetForm = () => {
@@ -41,7 +41,7 @@ export default function CoachEvents() {
   const createMutation = useMutation({
     mutationFn: () => api.events.create({ ...form, team_id: Number(form.team_id) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["my-events"] });
       toast({ title: "Event created" });
       setOpen(false);
       resetForm();
@@ -52,7 +52,7 @@ export default function CoachEvents() {
   const updateMutation = useMutation({
     mutationFn: () => api.events.update(editing.id, { ...form, team_id: Number(form.team_id) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["my-events"] });
       toast({ title: "Event updated" });
       setOpen(false);
       resetForm();
@@ -63,7 +63,7 @@ export default function CoachEvents() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.events.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["my-events"] });
       toast({ title: "Event deleted" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
