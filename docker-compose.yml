@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  backend:
+    build: ./backend
+    container_name: rallyriot-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - JWT_SECRET_KEY=rallyriot-super-secret-dev-key-2025
+      - DB_STORAGE=/app/data/rallyriot.sqlite
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=5242880
+    volumes:
+      - backend-data:/app/data
+      - backend-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend/rally-club-hub-main
+      args:
+        - VITE_API_URL=/api
+    container_name: rallyriot-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  backend-data:
+  backend-uploads:
