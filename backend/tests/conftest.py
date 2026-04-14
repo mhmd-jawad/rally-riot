@@ -16,7 +16,7 @@ class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     UPLOAD_DIR = tempfile.mkdtemp()
-    JWT_SECRET_KEY = "test-secret-key"
+    JWT_SECRET_KEY = "test-secret-key-with-sufficient-length-123456"
 
 
 @pytest.fixture(scope="session")
@@ -31,8 +31,10 @@ def db(app):
     """Create a fresh database for each test."""
     with app.app_context():
         _db.create_all()
+        from seed import seed
+        seed()
         yield _db
-        _db.session.rollback()
+        _db.session.remove()
         _db.drop_all()
 
 
@@ -57,20 +59,19 @@ def seed_users(client):
         ("parent2@test.com", "Robin Carter", "parent"),
     ]
 
-    # Create admin first via direct DB, then use admin to create the rest
-    # Actually, use the API: first user must exist, so create via API
-    for email, name, role in roles:
-        # Create user via login-less creation (need admin token)
-        pass
+    login_resp = client.post("/api/auth/login", json={
+        "email": "admin@rallyriot.com",
+        "password": "Password1!",
+    })
+    admin_token = login_resp.get_json()["data"]["token"]
 
-    # Simpler: create all users, login each
     for email, name, role in roles:
         resp = client.post("/api/users/", json={
             "email": email,
             "password": "password123",
             "full_name": name,
             "role": role,
-        })
+        }, headers=auth_header(admin_token))
         assert resp.status_code in (200, 201), f"Failed to create {email}: {resp.get_json()}"
 
     # Login each and collect tokens

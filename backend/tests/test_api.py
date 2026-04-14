@@ -1,4 +1,4 @@
-"""Comprehensive test suite for RallyRiot Python backend – 67 tests."""
+"""Comprehensive test suite for RallyRiot Python backend."""
 import json
 import io
 import pytest
@@ -8,12 +8,20 @@ def auth_header(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def admin_login(client):
+    """Login using the seeded admin account."""
+    return login(client, "admin@rallyriot.com", "Password1!")
+
+
 def register(client, email, password, full_name, role):
-    """Register a user via public endpoint."""
-    return client.post("/api/auth/register", json={
-        "email": email, "password": password,
-        "full_name": full_name, "role": role,
-    })
+    """Create a user via the admin-only endpoint."""
+    admin_token, _ = admin_login(client)
+    return client.post("/api/users/", json={
+        "email": email,
+        "password": password,
+        "full_name": full_name,
+        "role": role,
+    }, headers=auth_header(admin_token))
 
 
 def login(client, email, password="password123"):
@@ -67,28 +75,14 @@ class TestAuth:
         assert "token" in data["data"]
         assert data["data"]["user"]["email"] == "auth@test.com"
 
-    def test_register_missing_fields(self, client, db):
-        resp = client.post("/api/auth/register", json={})
-        assert resp.status_code == 400
-
-    def test_register_invalid_role(self, client, db):
+    def test_public_register_is_blocked(self, client, db):
         resp = client.post("/api/auth/register", json={
-            "email": "bad@test.com", "password": "password123",
-            "full_name": "Bad Role", "role": "superadmin",
+            "email": "blocked@test.com",
+            "password": "password123",
+            "full_name": "Blocked User",
+            "role": "player",
         })
-        assert resp.status_code == 400
-
-    def test_register_short_password(self, client, db):
-        resp = client.post("/api/auth/register", json={
-            "email": "short@test.com", "password": "12",
-            "full_name": "Short", "role": "player",
-        })
-        assert resp.status_code == 400
-
-    def test_register_duplicate_email(self, client, db):
-        register(client, "dup@test.com", "password123", "Dup", "player")
-        resp = register(client, "dup@test.com", "password123", "Dup2", "player")
-        assert resp.status_code == 409
+        assert resp.status_code == 403
 
     def test_me_unauthenticated(self, client, db):
         resp = client.get("/api/auth/me")
@@ -394,6 +388,17 @@ class TestEvents:
         resp = client.delete(f"/api/events/{eid}", headers=auth_header(admin_token))
         assert resp.status_code == 200
 
+    def test_coach_can_delete_assigned_team_event(self, client, db):
+        _, coach_token, _, team_id = self._setup(client)
+        r = client.post("/api/events/", json={
+            "team_id": team_id, "title": "Coach Delete", "event_type": "practice",
+            "court": "A", "start_time": "2025-06-04T14:00:00Z",
+            "end_time": "2025-06-04T16:00:00Z",
+        }, headers=auth_header(coach_token))
+        eid = r.get_json()["data"]["id"]
+        resp = client.delete(f"/api/events/{eid}", headers=auth_header(coach_token))
+        assert resp.status_code == 200
+
     def test_event_not_found(self, client, db):
         admin_token, _, _, _ = self._setup(client)
         resp = client.get("/api/events/9999", headers=auth_header(admin_token))
@@ -412,6 +417,44 @@ class TestEvents:
         resp = client.get("/api/events/my/calendar", headers=auth_header(player_token))
         assert resp.status_code == 200
         assert len(resp.get_json()["data"]) >= 1
+
+    def test_event_visibility_is_role_scoped(self, client, db):
+        admin_token, coach_token, _, team_id = self._setup(client)
+        _, other_player = make_user(client, "otherplayer@test.com", "Other Player", "player")
+        other_player_token, _ = login(client, "otherplayer@test.com")
+        r = client.post("/api/events/", json={
+            "team_id": team_id, "title": "Private Event", "event_type": "practice",
+            "court": "A", "start_time": "2025-06-06T10:00:00Z",
+            "end_time": "2025-06-06T12:00:00Z",
+        }, headers=auth_header(coach_token))
+        eid = r.get_json()["data"]["id"]
+
+        list_resp = client.get("/api/events/", headers=auth_header(other_player_token))
+        get_resp = client.get(f"/api/events/{eid}", headers=auth_header(other_player_token))
+
+        assert list_resp.status_code == 200
+        assert list_resp.get_json()["data"] == []
+        assert get_resp.status_code == 403
+
+    def test_schedule_change_notifications_persist(self, client, db):
+        admin_token, coach_token, _, team_id = self._setup(client)
+        player_token, player = make_user(client, "notifyplayer@test.com", "Notify Player", "player")
+        client.post(f"/api/teams/{team_id}/players", json={"player_user_id": player["id"]},
+                     headers=auth_header(admin_token))
+        r = client.post("/api/events/", json={
+            "team_id": team_id, "title": "Notify Event", "event_type": "practice",
+            "court": "A", "start_time": "2025-06-07T10:00:00Z",
+            "end_time": "2025-06-07T12:00:00Z",
+        }, headers=auth_header(coach_token))
+        eid = r.get_json()["data"]["id"]
+
+        resp = client.put(f"/api/events/{eid}", json={"court": "Court Z"},
+                          headers=auth_header(coach_token))
+        assert resp.status_code == 200
+
+        notif_resp = client.get("/api/notifications/", headers=auth_header(player_token))
+        assert notif_resp.status_code == 200
+        assert any(n["type"] == "schedule_change" for n in notif_resp.get_json()["data"])
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -473,6 +516,80 @@ class TestRegistrations:
         }, headers=auth_header(parent_token))
         assert resp.status_code == 409
 
+    def test_parent_cannot_register_unlinked_child(self, client, db):
+        admin_token, parent_token, _, _, team_id = self._setup(client)
+        _, other_child = make_user(client, "otherchild@test.com", "Other Child", "player")
+        fr = client.post("/api/registrations/forms", json={
+            "team_id": team_id, "title": "Link Required", "season": "2025", "fee": 100,
+        }, headers=auth_header(admin_token))
+        form_id = fr.get_json()["data"]["id"]
+        resp = client.post("/api/registrations/", json={
+            "form_id": form_id, "player_user_id": other_child["id"],
+        }, headers=auth_header(parent_token))
+        assert resp.status_code == 403
+
+    def test_parent_cannot_view_other_family_registration(self, client, db):
+        admin_token, _, _, _, team_id = self._setup(client)
+        parent1_token, parent1 = make_user(client, "family1@test.com", "Family One", "parent")
+        parent2_token, _ = make_user(client, "family2@test.com", "Family Two", "parent")
+        _, child = make_user(client, "familychild@test.com", "Family Child", "player")
+        client.post("/api/parent-child/", json={"child_user_id": child["id"]},
+                     headers=auth_header(parent1_token))
+        fr = client.post("/api/registrations/forms", json={
+            "team_id": team_id, "title": "Family Form", "season": "2025", "fee": 100,
+        }, headers=auth_header(admin_token))
+        form_id = fr.get_json()["data"]["id"]
+        reg_resp = client.post("/api/registrations/", json={
+            "form_id": form_id, "player_user_id": child["id"],
+        }, headers=auth_header(parent1_token))
+        reg_id = reg_resp.get_json()["data"]["registration"]["id"]
+
+        resp = client.get(f"/api/registrations/{reg_id}", headers=auth_header(parent2_token))
+        assert resp.status_code == 403
+
+    def test_waiver_upload_uses_multipart_and_persists(self, client, db):
+        admin_token, parent_token, _, player, team_id = self._setup(client)
+        fr = client.post("/api/registrations/forms", json={
+            "team_id": team_id, "title": "Waiver Form", "season": "2025", "fee": 100,
+            "requires_waiver": True,
+        }, headers=auth_header(admin_token))
+        form_id = fr.get_json()["data"]["id"]
+        reg_resp = client.post("/api/registrations/", json={
+            "form_id": form_id, "player_user_id": player["id"],
+        }, headers=auth_header(parent_token))
+        reg_id = reg_resp.get_json()["data"]["registration"]["id"]
+
+        upload_resp = client.post(
+            f"/api/registrations/{reg_id}/waivers",
+            data={"file": (io.BytesIO(b"%PDF-1.4 waiver"), "waiver.pdf")},
+            headers=auth_header(parent_token),
+            content_type="multipart/form-data",
+        )
+        assert upload_resp.status_code == 201
+
+        list_resp = client.get(f"/api/registrations/{reg_id}/waivers", headers=auth_header(parent_token))
+        assert list_resp.status_code == 200
+        assert len(list_resp.get_json()["data"]) == 1
+
+    def test_approval_requires_waiver_when_form_demands_it(self, client, db):
+        admin_token, parent_token, _, player, team_id = self._setup(client)
+        fr = client.post("/api/registrations/forms", json={
+            "team_id": team_id, "title": "Approval Form", "season": "2025", "fee": 100,
+            "requires_waiver": True,
+        }, headers=auth_header(admin_token))
+        form_id = fr.get_json()["data"]["id"]
+        reg_resp = client.post("/api/registrations/", json={
+            "form_id": form_id, "player_user_id": player["id"],
+        }, headers=auth_header(parent_token))
+        reg_id = reg_resp.get_json()["data"]["registration"]["id"]
+
+        resp = client.patch(
+            f"/api/registrations/{reg_id}/status",
+            json={"status": "approved"},
+            headers=auth_header(admin_token),
+        )
+        assert resp.status_code == 409
+
 
 # ═══════════════════════════════════════════════════════════════
 # INVOICE ROUTES
@@ -521,6 +638,12 @@ class TestInvoices:
         resp = client.patch(f"/api/invoices/{invoice['id']}/pay", headers=auth_header(parent_token))
         assert resp.status_code == 200
         assert resp.get_json()["data"]["status"] == "paid"
+
+    def test_player_cannot_access_invoice_endpoints(self, client, db):
+        _, _, invoice = self._setup_with_invoice(client)
+        player_token, _ = make_user(client, "invoiceviewer@test.com", "Invoice Viewer", "player")
+        resp = client.get(f"/api/invoices/{invoice['id']}", headers=auth_header(player_token))
+        assert resp.status_code == 403
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -580,6 +703,11 @@ class TestRSVP:
         assert resp.status_code == 200
         assert len(resp.get_json()["data"]) == 1
 
+    def test_player_cannot_list_rsvps_for_event(self, client, db):
+        _, _, player_token, _, _, event_id = self._setup(client)
+        resp = client.get(f"/api/rsvps/event/{event_id}", headers=auth_header(player_token))
+        assert resp.status_code == 403
+
 
 # ═══════════════════════════════════════════════════════════════
 # ATTENDANCE ROUTES
@@ -637,6 +765,11 @@ class TestAttendance:
         resp = client.get(f"/api/attendance/event/{event_id}", headers=auth_header(admin_token))
         assert resp.status_code == 200
         assert len(resp.get_json()["data"]) == 1
+
+    def test_player_cannot_list_attendance_for_event(self, client, db):
+        _, _, player_token, _, _, event_id = self._setup(client)
+        resp = client.get(f"/api/attendance/event/{event_id}", headers=auth_header(player_token))
+        assert resp.status_code == 403
 
     def test_player_cannot_mark_attendance(self, client, db):
         _, _, player_token, player, _, event_id = self._setup(client)

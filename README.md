@@ -23,6 +23,7 @@
 ### Sprint 1 Implemented
 
 - ✅ **Authentication** — JWT-based login/logout with secure password hashing
+- ✅ **Admin-Managed Access** — Demo accounts are created by admins; public sign-up is disabled
 - ✅ **RBAC** — Server-side role-based access control (admin, coach, player, parent)
 - ✅ **User Management** — Admin creates accounts and assigns roles
 - ✅ **Team Management** — Admin creates teams, assigns coaches and players
@@ -180,11 +181,11 @@ python seed.py
 ```
 
 The seed script creates:
-- 5 user accounts (admin, coach, player, parent, player2)
-- 1 parent-child link
+- 8 user accounts (admin, 2 coaches, 3 players, 2 parents)
+- 2 parent-child links
 - 2 teams with coach/player assignments
-- 2 sample events
-- 1 registration form
+- 3 sample events
+- 2 registration forms
 
 ---
 
@@ -243,6 +244,8 @@ pytest tests/ -v
 | GET    | `/api/auth/me`      | Auth  | Get current user        |
 | POST   | `/api/auth/logout`  | Auth  | Logout (client-side)    |
 
+Public sign-up is disabled in the functional demo build. Admins create accounts through `/api/users`.
+
 ### Users (Admin Only)
 | Method | Endpoint              | Description           |
 |--------|-----------------------|-----------------------|
@@ -270,12 +273,12 @@ pytest tests/ -v
 | Method | Endpoint                                | Role         | Description                |
 |--------|-----------------------------------------|--------------|----------------------------|
 | POST   | `/api/events`                           | Coach/Admin  | Create event               |
-| GET    | `/api/events`                           | Auth         | List events (filter ?team_id) |
-| GET    | `/api/events/:id`                       | Auth         | Get single event           |
+| GET    | `/api/events`                           | Auth         | List visible events (filter `?team_id`) |
+| GET    | `/api/events/:id`                       | Auth         | Get a visible event        |
 | PUT    | `/api/events/:id`                       | Coach/Admin  | Update event               |
 | DELETE | `/api/events/:id`                       | Coach/Admin  | Delete event               |
-| GET    | `/api/events/my/calendar`               | Player       | Player's team calendar     |
-| GET    | `/api/events/child/:childId/calendar`   | Parent       | Child's schedule           |
+| GET    | `/api/events/my/calendar`               | Auth         | Scoped calendar view       |
+| GET    | `/api/events/child/:childId/schedule`   | Parent/Admin | Child's schedule           |
 
 ### Registrations
 | Method | Endpoint                                    | Role         | Description             |
@@ -284,25 +287,28 @@ pytest tests/ -v
 | GET    | `/api/registrations/forms`                  | Auth         | List forms              |
 | PATCH  | `/api/registrations/forms/:id`              | Admin        | Toggle form active      |
 | POST   | `/api/registrations`                        | Parent       | Register child          |
-| POST   | `/api/registrations/:registrationId/waiver` | Parent/Admin | Upload waiver file      |
+| GET    | `/api/registrations`                        | Parent/Admin | List registrations      |
+| GET    | `/api/registrations/:id`                    | Parent/Admin | Get registration        |
+| POST   | `/api/registrations/:registrationId/waivers`| Parent/Admin | Upload waiver file      |
 
 ### Invoices / Payments
 | Method | Endpoint            | Role         | Description            |
 |--------|---------------------|--------------|------------------------|
 | GET    | `/api/invoices`     | Parent/Admin | View invoices + balance|
 | GET    | `/api/invoices/:id` | Parent/Admin | View single invoice    |
+| PATCH  | `/api/invoices/:id/pay` | Parent/Admin | Mark invoice as paid |
 
 ### RSVP
 | Method | Endpoint            | Role   | Description              |
 |--------|---------------------|--------|--------------------------|
-| POST   | `/api/rsvps`        | Player | Player RSVP to event     |
-| POST   | `/api/rsvps/parent` | Parent | Parent RSVP for child    |
+| POST   | `/api/rsvps`        | Player/Parent | RSVP to event     |
+| GET    | `/api/rsvps/event/:id` | Coach/Admin | View event RSVPs |
 
 ### Attendance
 | Method | Endpoint                    | Role        | Description           |
 |--------|----------------------------|-------------|-----------------------|
-| POST   | `/api/attendance/:eventId` | Coach/Admin | Mark attendance       |
-| GET    | `/api/attendance/:eventId` | Coach/Admin | Get event attendance  |
+| POST   | `/api/attendance`          | Coach/Admin | Mark attendance       |
+| GET    | `/api/attendance/event/:eventId` | Coach/Admin | Get event attendance  |
 
 ### Announcements
 | Method | Endpoint              | Role        | Description              |
@@ -323,17 +329,17 @@ pytest tests/ -v
 
 | Role    | Email                  | Password    |
 |---------|------------------------|-------------|
-| Admin   | admin@rallyriot.com    | admin123    |
-| Coach   | coach@rallyriot.com    | coach123    |
-| Player  | player@rallyriot.com   | player123   |
-| Parent  | parent@rallyriot.com   | parent123   |
-| Player2 | player2@rallyriot.com  | player123   |
+| Admin   | admin@rallyriot.com    | Password1!  |
+| Coach   | coach@rallyriot.com    | Password1!  |
+| Parent  | parent1@rallyriot.com  | Password1!  |
+| Player  | player1@rallyriot.com  | Password1!  |
+| Player2 | player2@rallyriot.com  | Password1!  |
 
 **Pre-configured relationships:**
-- Parent (Paula) is linked to Player (Peter)
-- Coach (Carlos) is assigned to Team "Thunder U16"
-- Player (Peter) is on Team "Thunder U16"
-- Player2 (Sara) is on Team "Lightning U18"
+- Parent Kim is linked to Player Alex
+- Parent Sam is linked to Player Jordan
+- Coach Williams is assigned to Team "Thunder U14"
+- Coach Johnson is assigned to Team "Lightning U16"
 
 ---
 
@@ -349,13 +355,13 @@ The following end-to-end flow works with the seeded data:
 6. **Coach creates practice** → `POST /api/events`
 7. **Conflicting event rejected** → `POST /api/events` returns 409
 8. **Player views calendar** → `GET /api/events/my/calendar`
-9. **Parent views child schedule** → `GET /api/events/child/:childId/calendar`
+9. **Parent views child schedule** → `GET /api/events/child/:childId/schedule`
 10. **Admin creates registration form** → `POST /api/registrations/forms`
-11. **Parent registers child + uploads waiver** → `POST /api/registrations` + `POST /api/registrations/:id/waiver`
+11. **Parent registers child + uploads waiver** → `POST /api/registrations` + `POST /api/registrations/:id/waivers`
 12. **Invoice auto-generated** → included in registration response
 13. **Parent views balance** → `GET /api/invoices`
-14. **Player/Parent RSVP** → `POST /api/rsvps` or `POST /api/rsvps/parent`
-15. **Coach marks attendance** → `POST /api/attendance/:eventId`
+14. **Player/Parent RSVP** → `POST /api/rsvps`
+15. **Coach marks attendance** → `POST /api/attendance`
 16. **Coach posts announcement** → `POST /api/announcements`
 17. **Event update triggers notifications** → `PUT /api/events/:id` → `GET /api/notifications`
 

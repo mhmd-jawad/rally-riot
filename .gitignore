@@ -1,6 +1,54 @@
-node_modules/
+# -----------------------------
+# Project-specific
+# -----------------------------
 data/
 uploads/
+
+# -----------------------------
+# Environment and secrets
+# -----------------------------
 .env
+.env.*
+!.env.example
+
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.python-version
+.venv/
+venv/
+ENV/
+env/
+
+# -----------------------------
+# Node / frontend
+# -----------------------------
+node_modules/
 coverage/
+dist/
+
+# -----------------------------
+# Databases and logs
+# -----------------------------
 *.sqlite
+*.db
+*.log
+
+# -----------------------------
+# OS / editor
+# -----------------------------
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

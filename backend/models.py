@@ -186,8 +186,8 @@ class Registration(db.Model):
     waiver = db.relationship("WaiverFile", uselist=False, backref="registration")
     invoice = db.relationship("Invoice", uselist=False, backref="registration")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relations=False):
+        data = {
             "id": self.id,
             "form_id": self.form_id,
             "player_user_id": self.player_user_id,
@@ -195,6 +195,16 @@ class Registration(db.Model):
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
             "status": self.status,
         }
+        if include_relations:
+            if self.form:
+                data["form"] = {
+                    "id": self.form.id,
+                    "title": self.form.title,
+                    "requires_waiver": self.form.requires_waiver,
+                }
+            if self.player:
+                data["player"] = self.player.to_public()
+        return data
 
 
 class WaiverFile(db.Model):
@@ -221,7 +231,7 @@ class Invoice(db.Model):
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     amount = db.Column(db.Float, nullable=False, default=0.0)
     amount_paid = db.Column(db.Float, nullable=False, default=0.0)
-    status = db.Column(db.String, default="pending")  # pending, paid
+    status = db.Column(db.String, default="unpaid")  # unpaid, paid
     due_date = db.Column(db.String, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -229,8 +239,9 @@ class Invoice(db.Model):
     parent = db.relationship("User", foreign_keys=[parent_user_id])
     player = db.relationship("User", foreign_keys=[player_user_id])
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relations=False):
+        outstanding_balance = max(float(self.amount) - float(self.amount_paid), 0.0)
+        data = {
             "id": self.id,
             "registration_id": self.registration_id,
             "parent_user_id": self.parent_user_id,
@@ -239,9 +250,16 @@ class Invoice(db.Model):
             "amount_paid": self.amount_paid,
             "status": self.status,
             "due_date": self.due_date,
+            "outstanding_balance": outstanding_balance,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_relations:
+            if self.parent:
+                data["parent"] = self.parent.to_public()
+            if self.player:
+                data["player"] = self.player.to_public()
+        return data
 
 
 class RSVP(db.Model):

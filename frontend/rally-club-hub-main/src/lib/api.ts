@@ -18,10 +18,11 @@ async function request<T = any>(
   options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE}${path}`;
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(url, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...authHeaders(),
       ...(options.headers || {}),
     },
@@ -132,11 +133,14 @@ export const registrations = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  uploadWaiver: (regId: number, filePath: string) =>
-    request(`/registrations/${regId}/waivers`, {
+  uploadWaiver: (regId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request(`/registrations/${regId}/waivers`, {
       method: "POST",
-      body: JSON.stringify({ file_path: filePath }),
-    }),
+      body: formData,
+    });
+  },
   listWaivers: (regId: number) =>
     request<{ success: boolean; data: any[] }>(`/registrations/${regId}/waivers`),
 };

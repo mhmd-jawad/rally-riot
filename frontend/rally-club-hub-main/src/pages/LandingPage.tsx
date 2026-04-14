@@ -27,9 +27,6 @@ export default function LandingPage() {
             <img src="/rallyriot.png" alt="RallyRiot" className="h-12 object-contain" />
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/register">
-              <Button variant="outline">Sign Up</Button>
-            </Link>
             <Link to="/login">
               <Button>Sign In</Button>
             </Link>
@@ -48,11 +45,8 @@ export default function LandingPage() {
           RallyRiot centralizes your volleyball club operations — members, schedules, payments, attendance, and communication — all in one place.
         </p>
         <div className="flex gap-4 justify-center">
-          <Link to="/register">
-            <Button size="lg" className="text-base px-8">Get Started</Button>
-          </Link>
           <Link to="/login">
-            <Button size="lg" variant="outline" className="text-base px-8">Sign In</Button>
+            <Button size="lg" className="text-base px-8">Open Demo</Button>
           </Link>
         </div>
       </section>

@@ -17,7 +17,6 @@ interface AuthContextType {
   profile: UserData | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -54,11 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.data.user as UserData);
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    await authApi.register(email, password, fullName, "player");
-    await signIn(email, password);
-  };
-
   const signOut = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
     localStorage.removeItem("token");
@@ -69,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const profile = user;
 
   return (
-    <AuthContext.Provider value={{ user, role, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, role, profile, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,6 @@
 """Business services: notifications, overlap checking, invoice generation."""
+from datetime import datetime, timedelta
+
 from extensions import db
 from models import Notification, Event, Invoice
 
@@ -85,13 +87,15 @@ class InvoiceService:
     @staticmethod
     def generate_from_registration(registration, form):
         """Create an invoice for a registration based on the form fee."""
+        due_date = (datetime.utcnow() + timedelta(days=14)).date().isoformat()
         invoice = Invoice(
             registration_id=registration.id,
             parent_user_id=registration.parent_user_id,
             player_user_id=registration.player_user_id,
             amount=form.fee or 0.0,
             amount_paid=0.0,
-            status="pending",
+            status="unpaid",
+            due_date=due_date,
         )
         db.session.add(invoice)
         db.session.flush()

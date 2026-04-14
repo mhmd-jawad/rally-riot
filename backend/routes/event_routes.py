@@ -4,7 +4,7 @@ from flask import Blueprint, request, g
 
 import api_response
 from auth import authenticate, authorize
-from models import Event, Team, TeamCoach, TeamPlayer, ParentChildLink, User
+from models import Event, Team, TeamCoach, TeamPlayer, ParentChildLink
 from extensions import db
 from services import OverlapService, NotificationService
 
@@ -18,6 +18,26 @@ def _parse_dt(s):
     if not s:
         return None
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def _visible_team_ids():
+    user_id = g.user["id"]
+    role = g.user["role"]
+    if role == "admin":
+        return None
+    if role == "coach":
+        memberships = TeamCoach.query.filter_by(coach_user_id=user_id).all()
+        return sorted({m.team_id for m in memberships})
+    if role == "player":
+        memberships = TeamPlayer.query.filter_by(player_user_id=user_id).all()
+        return sorted({m.team_id for m in memberships})
+
+    links = ParentChildLink.query.filter_by(parent_user_id=user_id).all()
+    child_ids = [l.child_user_id for l in links]
+    if not child_ids:
+        return []
+    memberships = TeamPlayer.query.filter(TeamPlayer.player_user_id.in_(child_ids)).all()
+    return sorted({m.team_id for m in memberships})
 
 
 @event_bp.route("/", methods=["POST"])
@@ -131,8 +151,6 @@ def update_event(event_id):
                 val = val.strip()
             setattr(event, key, val)
 
-    db.session.commit()
-
     # Notify players of schedule changes
     if schedule_changed:
         team_players = TeamPlayer.query.filter_by(team_id=event.team_id).all()
@@ -144,16 +162,22 @@ def update_event(event_id):
                 f"Event '{event.title}' has been updated.",
             )
 
+    db.session.commit()
+
     return api_response.success(event.to_dict(), "Event updated successfully.")
 
 
 @event_bp.route("/<int:event_id>", methods=["DELETE"])
 @authenticate
-@authorize("admin")
+@authorize("admin", "coach")
 def delete_event(event_id):
     event = Event.query.get(event_id)
     if not event:
         return api_response.not_found("Event not found.")
+    if g.user["role"] == "coach":
+        assignment = TeamCoach.query.filter_by(team_id=event.team_id, coach_user_id=g.user["id"]).first()
+        if not assignment:
+            return api_response.forbidden("You are not assigned as a coach for this team.")
     db.session.delete(event)
     db.session.commit()
     return api_response.success(None, "Event deleted.")
@@ -163,11 +187,19 @@ def delete_event(event_id):
 @authenticate
 def list_events():
     team_id = request.args.get("team_id", type=int)
+    visible_team_ids = _visible_team_ids()
+    if visible_team_ids is not None and team_id and team_id not in visible_team_ids:
+        return api_response.forbidden("You do not have access to that team's events.")
+
     query = Event.query
+    if visible_team_ids is not None:
+        if not visible_team_ids:
+            return api_response.success([])
+        query = query.filter(Event.team_id.in_(visible_team_ids))
     if team_id:
         query = query.filter_by(team_id=team_id)
     events = query.order_by(Event.start_time.asc()).all()
-    return api_response.success([e.to_dict() for e in events])
+    return api_response.success([e.to_dict(include_relations=True) for e in events])
 
 
 @event_bp.route("/<int:event_id>", methods=["GET"])
@@ -176,6 +208,9 @@ def get_event(event_id):
     event = Event.query.get(event_id)
     if not event:
         return api_response.not_found("Event not found.")
+    visible_team_ids = _visible_team_ids()
+    if visible_team_ids is not None and event.team_id not in visible_team_ids:
+        return api_response.forbidden("You do not have access to this event.")
     return api_response.success(event.to_dict(include_relations=True))
 
 

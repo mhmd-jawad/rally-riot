@@ -13,6 +13,7 @@ export default function ParentRegistration() {
   const queryClient = useQueryClient();
   const [selectedForm, setSelectedForm] = useState("");
   const [selectedChild, setSelectedChild] = useState("");
+  const [waiverFile, setWaiverFile] = useState<File | null>(null);
 
   const { data: children = [] } = useQuery({
     queryKey: ["my-children"],
@@ -30,22 +31,35 @@ export default function ParentRegistration() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: () =>
-      api.registrations.submit({
+    mutationFn: async () => {
+      const response = await api.registrations.submit({
         form_id: Number(selectedForm),
         player_user_id: Number(selectedChild),
-      }),
+      });
+
+      if (selectedFormDetails?.requires_waiver && waiverFile) {
+        await api.registrations.uploadWaiver(response.data.registration.id, waiverFile);
+      }
+
+      return response;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["registrations"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast({ title: "Registration submitted! Invoice has been generated." });
+      toast({
+        title: selectedFormDetails?.requires_waiver
+          ? "Registration and waiver submitted."
+          : "Registration submitted! Invoice has been generated.",
+      });
       setSelectedForm("");
       setSelectedChild("");
+      setWaiverFile(null);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const activeForms = forms.filter((f: any) => f.is_active);
+  const selectedFormDetails = activeForms.find((f: any) => String(f.id) === selectedForm) || null;
 
   const statusColor: Record<string, string> = {
     approved: "bg-green-100 text-green-800",
@@ -91,9 +105,28 @@ export default function ParentRegistration() {
               </Select>
             </div>
           </div>
+          {selectedFormDetails?.requires_waiver && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">Waiver File</label>
+              <input
+                type="file"
+                accept=".pdf,image/png,image/jpeg"
+                onChange={(e) => setWaiverFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-muted-foreground"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload a PDF, PNG, or JPEG waiver before submitting this registration.
+              </p>
+            </div>
+          )}
           <Button
             onClick={() => submitMutation.mutate()}
-            disabled={!selectedForm || !selectedChild || submitMutation.isPending}
+            disabled={
+              !selectedForm
+              || !selectedChild
+              || submitMutation.isPending
+              || (selectedFormDetails?.requires_waiver && !waiverFile)
+            }
           >
             <FileText className="w-4 h-4 mr-2" /> Submit Registration
           </Button>

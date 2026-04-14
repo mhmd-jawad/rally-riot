@@ -113,21 +113,21 @@ def seed():
     inv1 = Invoice(
         registration_id=reg1.id, parent_user_id=parent1.id,
         player_user_id=player1.id, amount=150.00, amount_paid=150.00,
-        status="paid",
+        status="paid", due_date=(now + timedelta(days=14)).date().isoformat(),
     )
     inv2 = Invoice(
         registration_id=reg2.id, parent_user_id=parent2.id,
         player_user_id=player2.id, amount=150.00, amount_paid=0.00,
-        status="pending",
+        status="unpaid", due_date=(now + timedelta(days=14)).date().isoformat(),
     )
     db.session.add_all([inv1, inv2])
     db.session.flush()
 
     # ── RSVPs ─────────────────────────────────────────────────
     db.session.add(RSVP(event_id=ev1.id, player_user_id=player1.id,
-                        responded_by_user_id=player1.id, status="yes"))
+                        responded_by_user_id=player1.id, status="attending"))
     db.session.add(RSVP(event_id=ev1.id, player_user_id=player2.id,
-                        responded_by_user_id=parent2.id, status="no"))
+                        responded_by_user_id=parent2.id, status="not_attending"))
     db.session.flush()
 
     # ── Attendance ────────────────────────────────────────────

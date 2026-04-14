@@ -3,7 +3,7 @@ from flask import Blueprint, g
 
 import api_response
 from auth import authenticate, authorize
-from models import Invoice, Registration, RegistrationForm, Event
+from models import Invoice
 from extensions import db
 
 invoice_bp = Blueprint("invoices", __name__)
@@ -11,24 +11,23 @@ invoice_bp = Blueprint("invoices", __name__)
 
 @invoice_bp.route("/", methods=["GET"])
 @authenticate
-@authorize("parent", "admin", "player")
+@authorize("parent", "admin")
 def list_invoices():
-    """Get invoices. Parents and players see their own; admins see all."""
+    """Get invoices. Parents see their own; admins see all."""
     if g.user["role"] == "admin":
         invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
-    elif g.user["role"] == "player":
-        invoices = Invoice.query.filter_by(player_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
     else:
         invoices = Invoice.query.filter_by(parent_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
 
     rows = []
     total_amount = 0
     total_paid = 0
+    total_outstanding = 0
     for inv in invoices:
-        d = inv.to_dict()
+        d = inv.to_dict(include_relations=True)
         total_amount += float(inv.amount)
-        if inv.status == "paid":
-            total_paid += float(inv.amount)
+        total_paid += float(inv.amount_paid)
+        total_outstanding += float(d["outstanding_balance"])
         rows.append(d)
 
     return api_response.success({
@@ -37,13 +36,14 @@ def list_invoices():
             "total": len(rows),
             "total_amount": total_amount,
             "total_paid": total_paid,
-            "total_outstanding": total_amount - total_paid,
+            "total_outstanding": total_outstanding,
         },
     })
 
 
 @invoice_bp.route("/<int:invoice_id>", methods=["GET"])
 @authenticate
+@authorize("parent", "admin")
 def get_invoice(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
@@ -52,12 +52,12 @@ def get_invoice(invoice_id):
     if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
 
-    return api_response.success(inv.to_dict())
+    return api_response.success(inv.to_dict(include_relations=True))
 
 
 @invoice_bp.route("/<int:invoice_id>/pay", methods=["PATCH"])
 @authenticate
-@authorize("parent", "admin", "player")
+@authorize("parent", "admin")
 def mark_paid(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
@@ -66,10 +66,7 @@ def mark_paid(invoice_id):
     if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
 
-    if g.user["role"] == "player" and inv.player_user_id != g.user["id"]:
-        return api_response.forbidden("Access denied.")
-
     inv.amount_paid = inv.amount
     inv.status = "paid"
     db.session.commit()
-    return api_response.success(inv.to_dict(), "Invoice marked as paid.")
+    return api_response.success(inv.to_dict(include_relations=True), "Invoice marked as paid.")

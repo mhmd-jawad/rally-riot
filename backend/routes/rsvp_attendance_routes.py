@@ -13,6 +13,13 @@ VALID_RSVP = ("attending", "not_attending", "maybe")
 VALID_ATTENDANCE = ("present", "absent")
 
 
+def _coach_can_access_event(event):
+    if g.user["role"] == "admin":
+        return True
+    assignment = TeamCoach.query.filter_by(team_id=event.team_id, coach_user_id=g.user["id"]).first()
+    return assignment is not None
+
+
 # ── RSVP ────────────────────────────────────────────────────────
 
 @rsvp_bp.route("/", methods=["POST"])
@@ -73,10 +80,13 @@ def upsert_rsvp():
 
 @rsvp_bp.route("/event/<int:event_id>", methods=["GET"])
 @authenticate
+@authorize("admin", "coach")
 def get_rsvps_for_event(event_id):
     event = Event.query.get(event_id)
     if not event:
         return api_response.not_found("Event not found.")
+    if not _coach_can_access_event(event):
+        return api_response.forbidden("You do not have access to this event.")
     rsvps = RSVP.query.filter_by(event_id=event_id).all()
     return api_response.success([r.to_dict() for r in rsvps])
 
@@ -135,9 +145,12 @@ def mark_attendance():
 
 @attendance_bp.route("/event/<int:event_id>", methods=["GET"])
 @authenticate
+@authorize("admin", "coach")
 def get_attendance_for_event(event_id):
     event = Event.query.get(event_id)
     if not event:
         return api_response.not_found("Event not found.")
+    if not _coach_can_access_event(event):
+        return api_response.forbidden("You do not have access to this event.")
     records = AttendanceRecord.query.filter_by(event_id=event_id).all()
     return api_response.success([r.to_dict() for r in records])

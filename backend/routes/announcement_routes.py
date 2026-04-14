@@ -10,6 +10,25 @@ from services import NotificationService
 announcement_bp = Blueprint("announcements", __name__)
 
 
+def _can_access_announcement(team_id):
+    if g.user["role"] == "admin":
+        return True
+    if g.user["role"] == "coach":
+        return TeamCoach.query.filter_by(team_id=team_id, coach_user_id=g.user["id"]).first() is not None
+    if g.user["role"] == "player":
+        return TeamPlayer.query.filter_by(team_id=team_id, player_user_id=g.user["id"]).first() is not None
+
+    from models import ParentChildLink
+    links = ParentChildLink.query.filter_by(parent_user_id=g.user["id"]).all()
+    child_ids = [l.child_user_id for l in links]
+    if not child_ids:
+        return False
+    return TeamPlayer.query.filter(
+        TeamPlayer.team_id == team_id,
+        TeamPlayer.player_user_id.in_(child_ids),
+    ).first() is not None
+
+
 @announcement_bp.route("/", methods=["POST"])
 @authenticate
 @authorize("coach", "admin")
@@ -43,7 +62,6 @@ def create_announcement():
         priority=data.get("priority", "normal"),
     )
     db.session.add(ann)
-    db.session.commit()
 
     # Notify all players on the team
     players = TeamPlayer.query.filter_by(team_id=team.id).all()
@@ -54,6 +72,8 @@ def create_announcement():
             "announcement",
             f"New announcement for {team.name}: {ann.title}",
         )
+
+    db.session.commit()
 
     return api_response.created(ann.to_dict(), "Announcement created.")
 
@@ -98,4 +118,6 @@ def get_announcement(announcement_id):
     ann = Announcement.query.get(announcement_id)
     if not ann:
         return api_response.not_found("Announcement not found.")
+    if not _can_access_announcement(ann.team_id):
+        return api_response.forbidden("You do not have access to this announcement.")
     return api_response.success(ann.to_dict())

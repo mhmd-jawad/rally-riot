@@ -69,45 +69,6 @@ def logout():
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    """Public registration endpoint."""
-    from auth import hash_password
-
-    data = request.get_json(silent=True) or {}
-    errors = []
-    if not data.get("full_name", "").strip():
-        errors.append({"field": "full_name", "message": "Full name is required."})
-    if not data.get("email"):
-        errors.append({"field": "email", "message": "Valid email is required."})
-    if not data.get("password") or len(data.get("password", "")) < 6:
-        errors.append({"field": "password", "message": "Password must be at least 6 characters."})
-    valid_roles = ("admin", "coach", "player", "parent")
-    if data.get("role") not in valid_roles:
-        errors.append({"field": "role", "message": "Role must be admin, coach, player, or parent."})
-    if errors:
-        return api_response.bad_request("Validation failed.", errors)
-
-    from models import User
-    from extensions import db
-
-    if User.query.filter_by(email=data["email"]).first():
-        return api_response.conflict("A user with this email already exists.")
-
-    user = User(
-        full_name=data["full_name"].strip(),
-        email=data["email"],
-        password_hash=hash_password(data["password"]),
-        role=data["role"],
-    )
-    db.session.add(user)
-    db.session.commit()
-
-    return api_response.created(
-        {
-            "id": user.id,
-            "full_name": user.full_name,
-            "email": user.email,
-            "role": user.role,
-            "is_active": user.is_active,
-        },
-        "User registered successfully.",
+    return api_response.forbidden(
+        "Public sign-up is disabled. Ask a club admin to create your account."
     )
