@@ -2,6 +2,8 @@
 
 **Sprint 1 MVP** — A full-stack platform that centralizes volleyball club operations including member/team management, scheduling, registrations, payments, attendance, RSVP, and notifications.
 
+For a short presenter-friendly walkthrough, see [DEMO_GUIDE.md](./DEMO_GUIDE.md).
+
 ## Table of Contents
 
 - [Features](#features)
@@ -15,6 +17,7 @@
 - [API Overview](#api-overview)
 - [Demo Accounts](#demo-accounts)
 - [Demo Flow](#demo-flow)
+- [Compact Demo Guide](#compact-demo-guide)
 
 ---
 
@@ -134,8 +137,8 @@ docker compose up --build
 cd backend
 
 # Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -143,10 +146,7 @@ pip install -r requirements.txt
 # Copy environment variables
 cp ../.env.example .env
 
-# Seed the database
-python seed.py
-
-# Start the server
+# Start the server (auto-seeds on first run if the DB is empty)
 python app.py
 ```
 
@@ -187,6 +187,8 @@ The seed script creates:
 - 3 sample events
 - 2 registration forms
 
+`python app.py` also runs the seed routine automatically when the database is empty, so `python seed.py` is optional for a fresh local setup.
+
 ---
 
 ## Running the Server
@@ -210,6 +212,12 @@ Health check: `GET http://localhost:5000/api/health`
 ```bash
 cd backend
 pytest tests/ -v
+```
+
+```bash
+cd frontend/rally-club-hub-main
+npm run build
+npm test
 ```
 
 **Test suite covers:**
@@ -285,11 +293,14 @@ Public sign-up is disabled in the functional demo build. Admins create accounts 
 |--------|---------------------------------------------|--------------|-------------------------|
 | POST   | `/api/registrations/forms`                  | Admin        | Create registration form|
 | GET    | `/api/registrations/forms`                  | Auth         | List forms              |
-| PATCH  | `/api/registrations/forms/:id`              | Admin        | Toggle form active      |
+| GET    | `/api/registrations/forms/:id`              | Auth         | Get single form         |
+| PATCH  | `/api/registrations/forms/:id`              | Admin        | Update form fields      |
 | POST   | `/api/registrations`                        | Parent       | Register child          |
 | GET    | `/api/registrations`                        | Parent/Admin | List registrations      |
 | GET    | `/api/registrations/:id`                    | Parent/Admin | Get registration        |
+| PATCH  | `/api/registrations/:id/status`             | Admin        | Approve/reject registration |
 | POST   | `/api/registrations/:registrationId/waivers`| Parent/Admin | Upload waiver file      |
+| GET    | `/api/registrations/:registrationId/waivers`| Parent/Admin | List waiver files       |
 
 ### Invoices / Payments
 | Method | Endpoint            | Role         | Description            |
@@ -315,6 +326,7 @@ Public sign-up is disabled in the functional demo build. Admins create accounts 
 |--------|-----------------------|-------------|--------------------------|
 | POST   | `/api/announcements`  | Coach/Admin | Post team announcement   |
 | GET    | `/api/announcements`  | Auth        | List (filter ?team_id)   |
+| GET    | `/api/announcements/:id` | Auth     | Get visible announcement |
 
 ### Notifications
 | Method | Endpoint                        | Role | Description             |
@@ -327,13 +339,16 @@ Public sign-up is disabled in the functional demo build. Admins create accounts 
 
 ## Demo Accounts
 
-| Role    | Email                  | Password    |
-|---------|------------------------|-------------|
-| Admin   | admin@rallyriot.com    | Password1!  |
-| Coach   | coach@rallyriot.com    | Password1!  |
-| Parent  | parent1@rallyriot.com  | Password1!  |
-| Player  | player1@rallyriot.com  | Password1!  |
-| Player2 | player2@rallyriot.com  | Password1!  |
+| Role    | Name            | Email                  | Password    |
+|---------|-----------------|------------------------|-------------|
+| Admin   | Admin User      | admin@rallyriot.com    | Password1!  |
+| Coach   | Coach Williams  | coach@rallyriot.com    | Password1!  |
+| Coach   | Coach Johnson   | coach2@rallyriot.com   | Password1!  |
+| Parent  | Parent Kim      | parent1@rallyriot.com  | Password1!  |
+| Parent  | Parent Sam      | parent2@rallyriot.com  | Password1!  |
+| Player  | Player Alex     | player1@rallyriot.com  | Password1!  |
+| Player  | Player Jordan   | player2@rallyriot.com  | Password1!  |
+| Player  | Player Casey    | player3@rallyriot.com  | Password1!  |
 
 **Pre-configured relationships:**
 - Parent Kim is linked to Player Alex
@@ -364,6 +379,12 @@ The following end-to-end flow works with the seeded data:
 15. **Coach marks attendance** → `POST /api/attendance`
 16. **Coach posts announcement** → `POST /api/announcements`
 17. **Event update triggers notifications** → `PUT /api/events/:id` → `GET /api/notifications`
+
+---
+
+## Compact Demo Guide
+
+Use [DEMO_GUIDE.md](./DEMO_GUIDE.md) for a short startup + login + walkthrough script you can use in a live demo.
 
 ---
 

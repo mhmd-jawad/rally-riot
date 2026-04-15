@@ -9,7 +9,7 @@ class Config:
     DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
     PORT = int(os.getenv("PORT", 5000))
 
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-secret")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "rallyriot-super-secret-dev-key-2025")
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 86400))  # seconds
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
