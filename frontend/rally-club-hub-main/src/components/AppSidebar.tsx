@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Trophy, Link2, FileText, DollarSign,
-  Calendar, ClipboardCheck, Megaphone, User, CreditCard, Baby
+  Calendar, ClipboardCheck, Megaphone, User, CreditCard
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,26 +55,26 @@ export function AppSidebar() {
         <div className="p-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-                <Trophy className="w-4 h-4 text-sidebar-primary-foreground" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                <Trophy className="w-4 h-4 text-black" />
               </div>
-              <span className="font-bold text-sidebar-accent-foreground text-lg">RallyRiot</span>
+              <span className="font-bold text-sidebar-accent-foreground text-lg tracking-tight">RallyRiot</span>
             </div>
           )}
           {collapsed && (
-            <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center mx-auto">
-              <Trophy className="w-4 h-4 text-sidebar-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center mx-auto shadow-lg shadow-orange-500/20">
+              <Trophy className="w-4 h-4 text-black" />
             </div>
           )}
         </div>
         <SidebarGroup>
-          <SidebarGroupLabel>{roleLabel} Menu</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-orange-400/60 uppercase text-xs tracking-widest">{roleLabel} Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url.split("/").length <= 2} className="hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
+                    <NavLink to={item.url} end={item.url.split("/").length <= 2} className="hover:bg-sidebar-accent hover:text-orange-300 transition-colors" activeClassName="bg-sidebar-accent text-orange-400 font-medium border-l-2 border-orange-500">
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -87,12 +87,12 @@ export function AppSidebar() {
         {!collapsed && profile && (
           <div className="mt-auto p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-                <User className="w-4 h-4 text-sidebar-foreground" />
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500/20 to-yellow-500/10 border border-orange-400/20 flex items-center justify-center">
+                <User className="w-4 h-4 text-orange-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-accent-foreground truncate">{profile.full_name}</p>
-                <p className="text-xs text-sidebar-foreground truncate">{roleLabel}</p>
+                <p className="text-xs text-orange-400/60 truncate">{roleLabel}</p>
               </div>
             </div>
           </div>
