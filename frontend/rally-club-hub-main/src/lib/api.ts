@@ -160,6 +160,16 @@ export const invoices = {
     request(`/invoices/${id}/pay`, { method: "PATCH" }),
   pay: (id: number) =>
     request(`/invoices/${id}/pay`, { method: "PATCH" }),
+  getInstallments: (invoiceId: number) =>
+    request<{ success: boolean; data: any }>(`/invoices/${invoiceId}/installments`),
+  payInstallment: (paymentId: number) =>
+    request(`/invoices/installments/${paymentId}/pay`, { method: "PATCH" }),
+  createDiscount: (data: { form_id: number; label: string; discount_type: string; value: number }) =>
+    request("/invoices/discounts", { method: "POST", body: JSON.stringify(data) }),
+  listDiscounts: (formId: number) =>
+    request<{ success: boolean; data: any[] }>(`/invoices/discounts/${formId}`),
+  deleteDiscount: (discountId: number) =>
+    request(`/invoices/discounts/${discountId}`, { method: "DELETE" }),
 };
 
 // ── RSVPs ───────────────────────────────────────────────────

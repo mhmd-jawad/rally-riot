@@ -243,6 +243,7 @@ class Invoice(db.Model):
 
     def to_dict(self, include_relations=False):
         outstanding_balance = max(float(self.amount) - float(self.amount_paid), 0.0)
+        plan = InstallmentPlan.query.filter_by(invoice_id=self.id).first()
         data = {
             "id": self.id,
             "registration_id": self.registration_id,
@@ -253,6 +254,7 @@ class Invoice(db.Model):
             "status": self.status,
             "due_date": self.due_date,
             "outstanding_balance": outstanding_balance,
+            "has_installment_plan": plan is not None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -262,6 +264,67 @@ class Invoice(db.Model):
             if self.player:
                 data["player"] = self.player.to_public()
         return data
+
+
+class Discount(db.Model):
+    __tablename__ = "discounts"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    form_id = db.Column(db.Integer, db.ForeignKey("registration_forms.id"), nullable=False)
+    label = db.Column(db.String, nullable=False)
+    discount_type = db.Column(db.String, nullable=False)  # percentage, fixed
+    value = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    form = db.relationship("RegistrationForm", foreign_keys=[form_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "form_id": self.form_id,
+            "label": self.label,
+            "discount_type": self.discount_type,
+            "value": self.value,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class InstallmentPlan(db.Model):
+    __tablename__ = "installment_plans"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey("invoices.id"), nullable=False)
+    num_installments = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    invoice = db.relationship("Invoice", foreign_keys=[invoice_id])
+    payments = db.relationship("InstallmentPayment", backref="plan", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "invoice_id": self.invoice_id,
+            "num_installments": self.num_installments,
+            "payments": [p.to_dict() for p in self.payments.order_by(InstallmentPayment.due_date.asc()).all()],
+        }
+
+
+class InstallmentPayment(db.Model):
+    __tablename__ = "installment_payments"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey("installment_plans.id"), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    due_date = db.Column(db.String, nullable=False)
+    status = db.Column(db.String, default="unpaid")  # unpaid, paid
+    paid_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "amount": self.amount,
+            "due_date": self.due_date,
+            "status": self.status,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+        }
 
 
 class RSVP(db.Model):

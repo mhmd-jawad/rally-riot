@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from extensions import db
-from models import Notification, Event, Invoice, TeamPlayer, ParentChildLink
+from models import Notification, Event, Invoice, TeamPlayer, ParentChildLink, Discount, InstallmentPlan, InstallmentPayment
 
 
 class NotificationService:
@@ -151,21 +151,48 @@ class ReminderService:
 
 
 class InvoiceService:
-    """Generate invoices from registrations."""
+    """Generate invoices from registrations, applying discounts and installment plans."""
 
     @staticmethod
-    def generate_from_registration(registration, form):
-        """Create an invoice for a registration based on the form fee."""
+    def generate_from_registration(registration, form, num_installments=1):
+        """Create an invoice for a registration, applying any form discounts and splitting into installments."""
+        base_fee = float(form.fee or 0.0)
+
+        # Apply all discounts defined on this form
+        discounts = Discount.query.filter_by(form_id=form.id).all()
+        total_discount = 0.0
+        for d in discounts:
+            if d.discount_type == "percentage":
+                total_discount += base_fee * (d.value / 100.0)
+            else:  # fixed
+                total_discount += d.value
+        final_amount = max(base_fee - total_discount, 0.0)
+
         due_date = (datetime.utcnow() + timedelta(days=14)).date().isoformat()
         invoice = Invoice(
             registration_id=registration.id,
             parent_user_id=registration.parent_user_id,
             player_user_id=registration.player_user_id,
-            amount=form.fee or 0.0,
+            amount=round(final_amount, 2),
             amount_paid=0.0,
             status="unpaid",
             due_date=due_date,
         )
         db.session.add(invoice)
+        db.session.flush()
+
+        # Create installment plan if requested and fee > 0
+        if num_installments > 1 and final_amount > 0:
+            plan = InstallmentPlan(invoice_id=invoice.id, num_installments=num_installments)
+            db.session.add(plan)
+            db.session.flush()
+
+            installment_amount = round(final_amount / num_installments, 2)
+            # Adjust last installment for rounding
+            for i in range(num_installments):
+                due = (datetime.utcnow() + timedelta(days=14 + i * 30)).date().isoformat()
+                amt = installment_amount if i < num_installments - 1 else round(final_amount - installment_amount * (num_installments - 1), 2)
+                db.session.add(InstallmentPayment(plan_id=plan.id, amount=amt, due_date=due, status="unpaid"))
+
         db.session.flush()
         return invoice
