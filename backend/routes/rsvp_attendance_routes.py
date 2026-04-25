@@ -3,7 +3,7 @@ from flask import Blueprint, request, g
 
 import api_response
 from auth import authenticate, authorize
-from models import RSVP, AttendanceRecord, Event, TeamCoach, TeamPlayer, ParentChildLink
+from models import RSVP, AttendanceRecord, Event, Team, TeamCoach, TeamPlayer, ParentChildLink, User
 from extensions import db
 
 rsvp_bp = Blueprint("rsvps", __name__)
@@ -158,3 +158,63 @@ def get_attendance_for_event(event_id):
         return api_response.forbidden("You do not have access to this event.")
     records = AttendanceRecord.query.filter_by(event_id=event_id).all()
     return api_response.success([r.to_dict() for r in records])
+
+
+@attendance_bp.route("/summary", methods=["GET"])
+@authenticate
+@authorize("admin", "coach")
+def attendance_summary():
+    """Aggregate attendance per player, optionally filtered by team."""
+    team_id = request.args.get("team_id", type=int)
+
+    # Build base query of attendance records joined to events
+    records = (
+        db.session.query(AttendanceRecord, Event)
+        .join(Event, AttendanceRecord.event_id == Event.id)
+    )
+    if team_id:
+        records = records.filter(Event.team_id == team_id)
+    elif g.user["role"] == "coach":
+        # coaches only see their teams
+        assignments = TeamCoach.query.filter_by(coach_user_id=g.user["id"]).all()
+        coach_team_ids = [a.team_id for a in assignments]
+        records = records.filter(Event.team_id.in_(coach_team_ids))
+
+    records = records.all()
+
+    # Aggregate per player
+    player_stats: dict = {}
+    for rec, event in records:
+        pid = rec.player_user_id
+        if pid not in player_stats:
+            player = User.query.get(pid)
+            player_stats[pid] = {
+                "player_id": pid,
+                "player_name": player.full_name if player else f"Player #{pid}",
+                "team_id": event.team_id,
+                "present": 0,
+                "absent": 0,
+                "total": 0,
+            }
+        player_stats[pid]["total"] += 1
+        if rec.status == "present":
+            player_stats[pid]["present"] += 1
+        else:
+            player_stats[pid]["absent"] += 1
+
+    # Attach team names and attendance rate
+    team_cache: dict = {}
+    rows = []
+    for stats in player_stats.values():
+        tid = stats["team_id"]
+        if tid not in team_cache:
+            team = Team.query.get(tid)
+            team_cache[tid] = team.name if team else f"Team #{tid}"
+        stats["team_name"] = team_cache[tid]
+        stats["attendance_rate"] = (
+            round(stats["present"] / stats["total"] * 100, 1) if stats["total"] > 0 else 0.0
+        )
+        rows.append(stats)
+
+    rows.sort(key=lambda x: (-x["attendance_rate"], x["player_name"]))
+    return api_response.success(rows)

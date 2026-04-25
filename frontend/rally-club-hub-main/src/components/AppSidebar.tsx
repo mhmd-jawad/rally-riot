@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Trophy, Link2, FileText, DollarSign,
-  Calendar, ClipboardCheck, Megaphone, User, CreditCard
+  Calendar, ClipboardCheck, Megaphone, User, CreditCard, BarChart3
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,7 @@ const adminItems = [
   { title: "Parent-Child Links", url: "/admin/links", icon: Link2 },
   { title: "Registration Forms", url: "/admin/registrations", icon: FileText },
   { title: "Finance", url: "/admin/finance", icon: DollarSign },
+  { title: "Attendance", url: "/admin/attendance", icon: BarChart3 },
 ];
 
 const coachItems = [
