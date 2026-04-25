@@ -167,10 +167,14 @@ export const rsvps = {
 
 // ── Attendance ──────────────────────────────────────────────
 export const attendance = {
-  mark: (data: { event_id: number; player_user_id: number; status: string }) =>
+  mark: (data: { event_id: number; player_user_id: number; status: string; absence_reason?: string }) =>
     request("/attendance/", { method: "POST", body: JSON.stringify(data) }),
   forEvent: (eventId: number) =>
     request<{ success: boolean; data: any[] }>(`/attendance/event/${eventId}`),
+  summary: (params?: { team_id?: number; player_id?: number }) => {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])).toString() : "";
+    return request<{ success: boolean; data: any }>(`/attendance/summary${qs}`);
+  },
 };
 
 // ── Announcements ───────────────────────────────────────────

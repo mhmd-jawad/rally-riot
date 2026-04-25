@@ -59,6 +59,7 @@ class Team(db.Model):
     name = db.Column(db.String, nullable=False, unique=True)
     age_group = db.Column(db.String, nullable=True)
     skill_level = db.Column(db.String, nullable=True)
+    priority_level = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -295,6 +296,7 @@ class AttendanceRecord(db.Model):
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     marked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     status = db.Column(db.String, nullable=False)  # present, absent
+    absence_reason = db.Column(db.Text, nullable=True)
     recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     event = db.relationship("Event", foreign_keys=[event_id])
@@ -308,6 +310,7 @@ class AttendanceRecord(db.Model):
             "player_user_id": self.player_user_id,
             "marked_by_user_id": self.marked_by_user_id,
             "status": self.status,
+            "absence_reason": self.absence_reason,
             "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
         }
 

@@ -126,9 +126,12 @@ def mark_attendance():
         event_id=data["event_id"], player_user_id=data["player_user_id"]
     ).first()
 
+    absence_reason = data.get("absence_reason") if data.get("status") == "absent" else None
+
     if existing:
         existing.status = data["status"]
         existing.marked_by_user_id = g.user["id"]
+        existing.absence_reason = absence_reason
         db.session.commit()
         return api_response.success(existing.to_dict(), "Attendance updated.")
     else:
@@ -137,6 +140,7 @@ def mark_attendance():
             player_user_id=data["player_user_id"],
             marked_by_user_id=g.user["id"],
             status=data["status"],
+            absence_reason=absence_reason,
         )
         db.session.add(record)
         db.session.commit()
