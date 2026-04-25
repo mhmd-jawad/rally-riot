@@ -74,6 +74,7 @@ class Team(db.Model):
             "name": self.name,
             "age_group": self.age_group,
             "skill_level": self.skill_level,
+            "priority_level": self.priority_level,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

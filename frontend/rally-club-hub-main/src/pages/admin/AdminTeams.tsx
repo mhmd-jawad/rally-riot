@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Users, UserPlus } from "lucide-react";
+import { Plus, Users, UserPlus, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminTeams() {
@@ -16,7 +16,7 @@ export default function AdminTeams() {
   const queryClient = useQueryClient();
   const [teamOpen, setTeamOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState<{ teamId: number; type: "coach" | "player" } | null>(null);
-  const [newTeam, setNewTeam] = useState({ name: "", age_group: "", skill_level: "" });
+  const [newTeam, setNewTeam] = useState({ name: "", age_group: "", skill_level: "", priority_level: "1" });
   const [selectedUserId, setSelectedUserId] = useState("");
 
   const { data: teams = [], isLoading } = useQuery({
@@ -30,12 +30,21 @@ export default function AdminTeams() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => api.teams.create(newTeam),
+    mutationFn: () => api.teams.create({ ...newTeam, priority_level: Number(newTeam.priority_level) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       toast({ title: "Team created" });
       setTeamOpen(false);
-      setNewTeam({ name: "", age_group: "", skill_level: "" });
+      setNewTeam({ name: "", age_group: "", skill_level: "", priority_level: "1" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const priorityMutation = useMutation({
+    mutationFn: ({ teamId, level }: { teamId: number; level: number }) => api.teams.setPriority(teamId, level),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      toast({ title: "Priority updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -82,6 +91,15 @@ export default function AdminTeams() {
               <div><Label>Name</Label><Input value={newTeam.name} onChange={e => setNewTeam(p => ({ ...p, name: e.target.value }))} /></div>
               <div><Label>Age Group</Label><Input placeholder="e.g. U12" value={newTeam.age_group} onChange={e => setNewTeam(p => ({ ...p, age_group: e.target.value }))} /></div>
               <div><Label>Skill Level</Label><Input placeholder="e.g. Intermediate" value={newTeam.skill_level} onChange={e => setNewTeam(p => ({ ...p, skill_level: e.target.value }))} /></div>
+              <div>
+                <Label>Priority Level (1 = lowest, 5 = highest)</Label>
+                <Select value={newTeam.priority_level} onValueChange={v => setNewTeam(p => ({ ...p, priority_level: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter><Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>Create</Button></DialogFooter>
           </DialogContent>
@@ -94,9 +112,21 @@ export default function AdminTeams() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>{team.name}</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   {team.age_group && <Badge variant="outline">{team.age_group}</Badge>}
                   {team.skill_level && <Badge variant="outline">{team.skill_level}</Badge>}
+                  <div className="flex items-center gap-1 ml-1">
+                    <Star className="w-3 h-3 text-yellow-500" />
+                    <Select
+                      value={String(team.priority_level ?? 1)}
+                      onValueChange={v => priorityMutation.mutate({ teamId: team.id, level: Number(v) })}
+                    >
+                      <SelectTrigger className="h-7 w-14 text-xs px-2"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardTitle>
             </CardHeader>

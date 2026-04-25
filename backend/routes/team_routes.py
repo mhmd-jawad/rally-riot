@@ -22,10 +22,15 @@ def create_team():
     if Team.query.filter_by(name=data["name"].strip()).first():
         return api_response.conflict("A team with this name already exists.")
 
+    priority = data.get("priority_level", 1)
+    if not isinstance(priority, int) or not (1 <= priority <= 5):
+        priority = 1
+
     team = Team(
         name=data["name"].strip(),
         age_group=data.get("age_group"),
         skill_level=data.get("skill_level"),
+        priority_level=priority,
     )
     db.session.add(team)
     db.session.commit()
@@ -98,6 +103,26 @@ def assign_coach(team_id):
         {"team_id": team_id, "coach_user_id": coach_id},
         "Coach assigned to team.",
     )
+
+
+@team_bp.route("/<int:team_id>/priority", methods=["PATCH"])
+@authenticate
+@authorize("admin")
+def set_priority(team_id):
+    team = Team.query.get(team_id)
+    if not team:
+        return api_response.not_found("Team not found.")
+
+    data = request.get_json(silent=True) or {}
+    level = data.get("priority_level")
+    if level is None or not isinstance(level, int) or not (1 <= level <= 5):
+        return api_response.bad_request("Validation failed.", [
+            {"field": "priority_level", "message": "Priority level must be an integer between 1 and 5."}
+        ])
+
+    team.priority_level = level
+    db.session.commit()
+    return api_response.success(team.to_dict(include_members=True), "Team priority updated.")
 
 
 @team_bp.route("/<int:team_id>/players", methods=["POST"])

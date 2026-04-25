@@ -81,6 +81,11 @@ export const teams = {
       method: "POST",
       body: JSON.stringify({ player_user_id: playerUserId }),
     }),
+  setPriority: (teamId: number, priority_level: number) =>
+    request(`/teams/${teamId}/priority`, {
+      method: "PATCH",
+      body: JSON.stringify({ priority_level }),
+    }),
 };
 
 // ── Parent-Child ────────────────────────────────────────────
