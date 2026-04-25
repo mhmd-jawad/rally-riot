@@ -14,6 +14,7 @@ import AdminLinks from "./pages/admin/AdminLinks";
 import AdminRegistrations from "./pages/admin/AdminRegistrations";
 import AdminFinance from "./pages/admin/AdminFinance";
 import AdminAttendance from "./pages/admin/AdminAttendance";
+import AdminEvents from "./pages/admin/AdminEvents";
 import CoachDashboard from "./pages/coach/CoachDashboard";
 import CoachEvents from "./pages/coach/CoachEvents";
 import CoachAttendance from "./pages/coach/CoachAttendance";
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/admin/registrations" element={<AdminRegistrations />} />
               <Route path="/admin/finance" element={<AdminFinance />} />
               <Route path="/admin/attendance" element={<AdminAttendance />} />
+              <Route path="/admin/events" element={<AdminEvents />} />
             </Route>
 
             <Route element={<AppLayout allowedRoles={["coach"]} />}>

@@ -17,6 +17,7 @@ const adminItems = [
   { title: "Registration Forms", url: "/admin/registrations", icon: FileText },
   { title: "Finance", url: "/admin/finance", icon: DollarSign },
   { title: "Attendance", url: "/admin/attendance", icon: BarChart3 },
+  { title: "Events", url: "/admin/events", icon: Calendar },
 ];
 
 const coachItems = [

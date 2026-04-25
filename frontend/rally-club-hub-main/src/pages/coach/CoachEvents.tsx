@@ -2,7 +2,7 @@ import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,7 +98,7 @@ export default function CoachEvents() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Events</h1>
-          <p className="text-muted-foreground">{events.length} events</p>
+          <p className="text-muted-foreground">{(events as any[]).length} events</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
@@ -114,7 +114,7 @@ export default function CoachEvents() {
                   <Label>Team</Label>
                   <Select value={form.team_id} onValueChange={v => setForm(p => ({ ...p, team_id: v }))}>
                     <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
-                    <SelectContent>{teams.map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{(teams as any[]).map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -137,10 +137,7 @@ export default function CoachEvents() {
               </div>
             </div>
             <DialogFooter>
-              <Button
-                onClick={() => editing ? updateMutation.mutate() : createMutation.mutate()}
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
+              <Button onClick={() => editing ? updateMutation.mutate() : createMutation.mutate()} disabled={createMutation.isPending || updateMutation.isPending}>
                 {editing ? "Update" : "Create"}
               </Button>
             </DialogFooter>
@@ -149,7 +146,8 @@ export default function CoachEvents() {
       </div>
 
       <div className="space-y-4">
-        {events.map((event: any) => (
+        {(events as any[]).length === 0 && <p className="text-muted-foreground text-center py-8">No events yet</p>}
+        {(events as any[]).map((event: any) => (
           <Card key={event.id}>
             <CardContent className="flex items-center justify-between py-4">
               <div className="space-y-1">

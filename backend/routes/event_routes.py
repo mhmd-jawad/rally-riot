@@ -1,10 +1,10 @@
 """Event routes: CRUD, calendar, child schedule."""
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from flask import Blueprint, request, g
 
 import api_response
 from auth import authenticate, authorize
-from models import Event, Team, TeamCoach, TeamPlayer, ParentChildLink
+from models import Event, RecurringEventRule, Team, TeamCoach, TeamPlayer, ParentChildLink
 from extensions import db
 from services import OverlapService, NotificationService
 
@@ -242,6 +242,127 @@ def my_calendar():
 
     events = Event.query.filter(Event.team_id.in_(team_ids)).order_by(Event.start_time.asc()).all()
     return api_response.success([e.to_dict(include_relations=True) for e in events])
+
+
+@event_bp.route("/recurring", methods=["POST"])
+@authenticate
+@authorize("coach", "admin")
+def create_recurring_events():
+    data = request.get_json(silent=True) or {}
+    errors = []
+    if not data.get("team_id"):
+        errors.append({"field": "team_id", "message": "team_id is required."})
+    if data.get("event_type") not in VALID_EVENT_TYPES:
+        errors.append({"field": "event_type", "message": f"event_type must be one of {', '.join(VALID_EVENT_TYPES)}."})
+    if not data.get("title", "").strip():
+        errors.append({"field": "title", "message": "title is required."})
+    if not data.get("court", "").strip():
+        errors.append({"field": "court", "message": "court is required."})
+    if not data.get("start_date"):
+        errors.append({"field": "start_date", "message": "start_date is required (YYYY-MM-DD)."})
+    if not data.get("end_date"):
+        errors.append({"field": "end_date", "message": "end_date is required (YYYY-MM-DD)."})
+    if not isinstance(data.get("days_of_week"), list) or not data["days_of_week"]:
+        errors.append({"field": "days_of_week", "message": "days_of_week must be a non-empty list of integers 0–6."})
+    if data.get("start_hour") is None:
+        errors.append({"field": "start_hour", "message": "start_hour is required."})
+    if not data.get("duration_minutes"):
+        errors.append({"field": "duration_minutes", "message": "duration_minutes is required."})
+    if errors:
+        return api_response.bad_request("Validation failed.", errors)
+
+    try:
+        rule_start = date.fromisoformat(data["start_date"])
+        rule_end = date.fromisoformat(data["end_date"])
+    except ValueError:
+        return api_response.bad_request("start_date and end_date must be valid YYYY-MM-DD dates.")
+
+    if rule_end <= rule_start:
+        return api_response.bad_request("end_date must be after start_date.")
+    if (rule_end - rule_start).days > 366:
+        return api_response.bad_request("Recurring series cannot span more than one year.")
+
+    user_id = g.user["id"]
+    if g.user["role"] == "coach":
+        if not TeamCoach.query.filter_by(team_id=data["team_id"], coach_user_id=user_id).first():
+            return api_response.forbidden("You are not assigned as a coach for this team.")
+
+    days_of_week = sorted(set(int(d) for d in data["days_of_week"] if 0 <= int(d) <= 6))
+    start_hour = int(data["start_hour"])
+    start_minute = int(data.get("start_minute", 0))
+    duration = int(data["duration_minutes"])
+
+    rule = RecurringEventRule(
+        team_id=data["team_id"],
+        created_by_user_id=user_id,
+        event_type=data["event_type"],
+        title=data["title"].strip(),
+        description=data.get("description"),
+        court=data["court"].strip(),
+        days_of_week=",".join(str(d) for d in days_of_week),
+        start_date=data["start_date"],
+        end_date=data["end_date"],
+        start_hour=start_hour,
+        start_minute=start_minute,
+        duration_minutes=duration,
+    )
+    db.session.add(rule)
+    db.session.flush()
+
+    created_events = []
+    skipped_conflicts = []
+    current = rule_start
+    while current <= rule_end:
+        if current.weekday() in days_of_week:
+            start_dt = datetime(current.year, current.month, current.day, start_hour, start_minute)
+            end_dt = start_dt + timedelta(minutes=duration)
+            conflict = OverlapService.check_conflicts(
+                court=rule.court,
+                team_id=rule.team_id,
+                coach_user_id=user_id,
+                start_time=start_dt,
+                end_time=end_dt,
+            )
+            if conflict:
+                skipped_conflicts.append({"date": current.isoformat(), "reason": conflict})
+            else:
+                ev = Event(
+                    team_id=rule.team_id,
+                    created_by_user_id=user_id,
+                    recurring_rule_id=rule.id,
+                    event_type=rule.event_type,
+                    title=rule.title,
+                    description=rule.description,
+                    court=rule.court,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                )
+                db.session.add(ev)
+                created_events.append(ev)
+        current += timedelta(days=1)
+
+    db.session.commit()
+
+    return api_response.created({
+        "rule": rule.to_dict(),
+        "events_created": len(created_events),
+        "conflicts_skipped": skipped_conflicts,
+    }, f"Recurring series created: {len(created_events)} event(s) scheduled.")
+
+
+@event_bp.route("/recurring/<int:rule_id>", methods=["DELETE"])
+@authenticate
+@authorize("coach", "admin")
+def delete_recurring_series(rule_id):
+    rule = RecurringEventRule.query.get(rule_id)
+    if not rule:
+        return api_response.not_found("Recurring rule not found.")
+    if g.user["role"] == "coach":
+        if not TeamCoach.query.filter_by(team_id=rule.team_id, coach_user_id=g.user["id"]).first():
+            return api_response.forbidden("You are not assigned as a coach for this team.")
+    db.session.delete(rule)
+    db.session.commit()
+    return api_response.success(None, "Recurring series and all its events deleted.")
 
 
 @event_bp.route("/child/<int:child_id>/schedule", methods=["GET"])

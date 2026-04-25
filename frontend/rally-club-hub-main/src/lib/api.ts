@@ -117,6 +117,14 @@ export const events = {
   myCalendar: () => request<{ success: boolean; data: any[] }>("/events/my/calendar"),
   childSchedule: (childId: number) =>
     request<{ success: boolean; data: any[] }>(`/events/child/${childId}/schedule`),
+  createRecurring: (data: {
+    team_id: number; event_type: string; title: string; court: string;
+    start_date: string; end_date: string; days_of_week: number[];
+    start_hour: number; start_minute: number; duration_minutes: number;
+    description?: string;
+  }) => request("/events/recurring", { method: "POST", body: JSON.stringify(data) }),
+  deleteRecurringSeries: (ruleId: number) =>
+    request(`/events/recurring/${ruleId}`, { method: "DELETE" }),
 };
 
 // ── Registration ────────────────────────────────────────────

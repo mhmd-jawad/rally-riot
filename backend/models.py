@@ -100,11 +100,51 @@ class TeamPlayer(db.Model):
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
 
+class RecurringEventRule(db.Model):
+    __tablename__ = "recurring_event_rules"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    event_type = db.Column(db.String, nullable=False)
+    title = db.Column(db.String, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    court = db.Column(db.String, nullable=False)
+    # days_of_week: comma-separated ints 0=Mon … 6=Sun e.g. "0,2,4"
+    days_of_week = db.Column(db.String, nullable=False)
+    start_date = db.Column(db.String, nullable=False)   # ISO date YYYY-MM-DD
+    end_date = db.Column(db.String, nullable=False)     # ISO date YYYY-MM-DD
+    start_hour = db.Column(db.Integer, nullable=False)  # local hour of day
+    start_minute = db.Column(db.Integer, nullable=False, default=0)
+    duration_minutes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    events = db.relationship("Event", backref="recurring_rule", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "team_id": self.team_id,
+            "created_by_user_id": self.created_by_user_id,
+            "event_type": self.event_type,
+            "title": self.title,
+            "description": self.description,
+            "court": self.court,
+            "days_of_week": self.days_of_week,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "start_hour": self.start_hour,
+            "start_minute": self.start_minute,
+            "duration_minutes": self.duration_minutes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Event(db.Model):
     __tablename__ = "events"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    recurring_rule_id = db.Column(db.Integer, db.ForeignKey("recurring_event_rules.id"), nullable=True)
     event_type = db.Column(db.String, nullable=False)  # practice, match, tryout, tournament
     title = db.Column(db.String, nullable=False)
     description = db.Column(db.Text, nullable=True)
@@ -121,6 +161,7 @@ class Event(db.Model):
             "id": self.id,
             "team_id": self.team_id,
             "created_by_user_id": self.created_by_user_id,
+            "recurring_rule_id": self.recurring_rule_id,
             "event_type": self.event_type,
             "title": self.title,
             "description": self.description,
