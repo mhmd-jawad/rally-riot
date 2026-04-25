@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,8 +29,8 @@ export default function PlayerSchedule() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date());
-  const pastEvents = events.filter((e: any) => new Date(e.start_time) < new Date());
+  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
+  const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
 
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
@@ -58,7 +59,7 @@ export default function PlayerSchedule() {
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(new Date(event.start_time), "MMM d, h:mm a")} – {format(new Date(event.end_time), "h:mm a")}</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(event.start_time), "MMM d, h:mm a")} – {format(parseUTC(event.end_time), "h:mm a")}</span>
                       </div>
                       {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
                     </div>
@@ -86,7 +87,7 @@ export default function PlayerSchedule() {
                     <p className="font-medium text-sm">{event.title}</p>
                     <Badge variant="outline">{event.event_type}</Badge>
                   </div>
-                  <span className="text-xs text-muted-foreground">{format(new Date(event.start_time), "MMM d, h:mm a")}</span>
+                  <span className="text-xs text-muted-foreground">{format(parseUTC(event.start_time), "MMM d, h:mm a")}</span>
                 </CardContent>
               </Card>
             ))}

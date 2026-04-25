@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -151,7 +152,7 @@ export default function AdminRegistrations() {
                           <td className="p-4 text-sm">#{r.id}</td>
                           <td className="p-4 text-sm">{r.player?.full_name || `Player #${r.player_user_id}`}</td>
                           <td className="p-4 text-sm">{r.form?.title || `Form #${r.form_id}`}</td>
-                          <td className="p-4 text-sm text-muted-foreground">{r.submitted_at ? format(new Date(r.submitted_at), "MMM d, yyyy") : "—"}</td>
+                          <td className="p-4 text-sm text-muted-foreground">{r.submitted_at ? format(parseUTC(r.submitted_at), "MMM d, yyyy") : "—"}</td>
                           <td className="p-4"><Badge variant="secondary" className={statusColor[r.status] || ""}>{r.status}</Badge></td>
                           <td className="p-4">
                             <Select value={r.status} onValueChange={status => statusMutation.mutate({ id: r.id, status })}>

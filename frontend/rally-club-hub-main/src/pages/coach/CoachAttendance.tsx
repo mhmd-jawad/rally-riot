@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -94,7 +95,7 @@ export default function CoachAttendance() {
             <SelectContent>
               {events.map((e: any) => (
                 <SelectItem key={e.id} value={String(e.id)}>
-                  {e.title} — {format(new Date(e.start_time), "MMM d, h:mm a")}
+                  {e.title} — {format(parseUTC(e.start_time), "MMM d, h:mm a")}
                 </SelectItem>
               ))}
             </SelectContent>

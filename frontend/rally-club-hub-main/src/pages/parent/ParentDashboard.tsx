@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,7 +32,7 @@ export default function ParentDashboard() {
 
   const invoices = invoiceData?.invoices || [];
   const unpaid = invoices.filter((i: any) => i.status !== "paid");
-  const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date()).slice(0, 5);
+  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date()).slice(0, 5);
   const unreadNotifs = notifications.filter((n: any) => !n.is_read);
 
   return (
@@ -62,7 +63,7 @@ export default function ParentDashboard() {
                       <p className="font-medium text-sm">{e.title}</p>
                       <p className="text-xs text-muted-foreground">{e.event_type} • {e.court || "TBD"}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{format(new Date(e.start_time), "MMM d, h:mm a")}</span>
+                    <span className="text-xs text-muted-foreground">{format(parseUTC(e.start_time), "MMM d, h:mm a")}</span>
                   </div>
                 ))}
               </div>

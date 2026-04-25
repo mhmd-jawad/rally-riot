@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +63,7 @@ export default function ParentPayments() {
                       <p className="text-sm text-muted-foreground">
                         {inv.player?.full_name} • Total: ${inv.amount.toFixed(2)} • Paid: ${inv.amount_paid.toFixed(2)} • Due: ${remaining.toFixed(2)}
                       </p>
-                      {inv.due_date && <p className="text-xs text-muted-foreground">Due by {format(new Date(inv.due_date), "MMM d, yyyy")}</p>}
+                      {inv.due_date && <p className="text-xs text-muted-foreground">Due by {format(parseUTC(inv.due_date), "MMM d, yyyy")}</p>}
                     </div>
                     <Button onClick={() => payMutation.mutate({ id: inv.id })} disabled={payMutation.isPending}>
                       <CreditCard className="w-4 h-4 mr-2" /> Pay ${remaining.toFixed(2)}

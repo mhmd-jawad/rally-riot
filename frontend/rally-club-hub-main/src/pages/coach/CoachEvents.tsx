@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -157,7 +158,7 @@ export default function CoachEvents() {
                   <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {event.court || "TBD"} • {event.start_time ? format(new Date(event.start_time), "MMM d, h:mm a") : "—"} – {event.end_time ? format(new Date(event.end_time), "h:mm a") : "—"}
+                  {event.court || "TBD"} • {event.start_time ? format(parseUTC(event.start_time), "MMM d, h:mm a") : "—"} – {event.end_time ? format(parseUTC(event.end_time), "h:mm a") : "—"}
                 </p>
               </div>
               <div className="flex gap-2">

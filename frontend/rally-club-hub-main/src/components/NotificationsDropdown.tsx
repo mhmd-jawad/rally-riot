@@ -80,7 +80,7 @@ export function NotificationsDropdown() {
                 </div>
                 {n.message && <p className="text-xs text-muted-foreground mt-1">{n.message}</p>}
                 <p className="text-xs text-muted-foreground mt-1">
-                  {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(n.created_at + "Z"), { addSuffix: true })}
                 </p>
               </div>
             ))

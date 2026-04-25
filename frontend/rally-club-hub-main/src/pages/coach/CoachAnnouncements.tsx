@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -102,7 +103,7 @@ export default function CoachAnnouncements() {
                     <Badge variant="secondary" className={priorityColor[a.priority] || ""}>{a.priority}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">{a.message}</p>
-                  <p className="text-xs text-muted-foreground">{a.team?.name} • {format(new Date(a.created_at), "MMM d, yyyy h:mm a")}</p>
+                  <p className="text-xs text-muted-foreground">{a.team?.name} • {format(parseUTC(a.created_at), "MMM d, yyyy h:mm a")}</p>
                 </div>
               </div>
             </CardContent>

@@ -1,8 +1,8 @@
 """Business services: notifications, overlap checking, invoice generation."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from extensions import db
-from models import Notification, Event, Invoice
+from models import Notification, Event, Invoice, TeamPlayer, ParentChildLink
 
 
 class NotificationService:
@@ -79,6 +79,75 @@ class OverlapService:
             return f"Coach already has an event during that time (event #{coach_conflict.id})."
 
         return None
+
+
+class ReminderService:
+    """Send event reminder notifications to players and parents."""
+
+    @staticmethod
+    def send_upcoming_reminders(hours_ahead=24):
+        """
+        Find events starting within the next `hours_ahead` hours and notify
+        all players on the team plus their linked parents. Skips events that
+        already have a reminder notification sent within the last hour to avoid
+        duplicates if the job runs frequently.
+        """
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        window_start = now
+        window_end = now + timedelta(hours=hours_ahead)
+
+        upcoming = Event.query.filter(
+            Event.start_time >= window_start,
+            Event.start_time <= window_end,
+        ).all()
+
+        notified_count = 0
+        for event in upcoming:
+            # Check if a reminder was already sent for this event recently
+            already_sent = Notification.query.filter(
+                Notification.type == "event_reminder",
+                Notification.title.like(f"%{event.id}%"),
+                Notification.created_at >= now - timedelta(hours=1),
+            ).first()
+            if already_sent:
+                continue
+
+            players = TeamPlayer.query.filter_by(team_id=event.team_id).all()
+            player_ids = [p.player_user_id for p in players]
+
+            if not player_ids:
+                continue
+
+            start_str = event.start_time.strftime("%b %d at %I:%M %p")
+            message = f"Reminder: '{event.title}' is scheduled for {start_str} at {event.court}."
+            title = f"[Event #{event.id}] Upcoming Event Reminder"
+
+            NotificationService.notify_many(
+                player_ids,
+                "event_reminder",
+                message,
+                title=title,
+            )
+
+            # Also notify parents of those players
+            parent_ids = set()
+            for pid in player_ids:
+                links = ParentChildLink.query.filter_by(child_user_id=pid).all()
+                for link in links:
+                    parent_ids.add(link.parent_user_id)
+
+            if parent_ids:
+                NotificationService.notify_many(
+                    list(parent_ids),
+                    "event_reminder",
+                    message,
+                    title=title,
+                )
+
+            db.session.commit()
+            notified_count += 1
+
+        return notified_count
 
 
 class InvoiceService:

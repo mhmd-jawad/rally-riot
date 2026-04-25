@@ -197,6 +197,7 @@ export const announcements = {
 // ── Notifications ───────────────────────────────────────────
 export const notifications = {
   list: () => request<{ success: boolean; data: any[] }>("/notifications/"),
+  sendReminders: () => request<{ success: boolean; message: string }>("/notifications/send-reminders", { method: "POST" }),
   markRead: (id: number) =>
     request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () =>
