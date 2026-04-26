@@ -1,6 +1,9 @@
 """Flask application factory."""
 import os
-from flask import Flask, jsonify
+import logging
+import logging.config
+import logging.handlers
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 
 from config import Config
@@ -8,7 +11,44 @@ from extensions import db
 from routes import register_blueprints
 
 
+def configure_logging():
+    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logging.config.dictConfig({
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                "datefmt": "%Y-%m-%dT%H:%M:%S",
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+                "stream": "ext://sys.stdout",
+            },
+            "file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": os.path.join(log_dir, "rallyriot.log"),
+                "maxBytes": 10 * 1024 * 1024,  # 10 MB
+                "backupCount": 5,
+            },
+        },
+        "root": {"level": "INFO", "handlers": ["console", "file"]},
+        "loggers": {
+            "routes.ai_routes": {"level": "DEBUG"},
+        },
+    })
+
+
 def create_app(config_class=Config):
+    configure_logging()
+    logger = logging.getLogger(__name__)
+
     app = Flask(__name__)
     app.config.from_object(config_class)
     app.url_map.strict_slashes = False
@@ -27,6 +67,19 @@ def create_app(config_class=Config):
 
     # ── Blueprints ──────────────────────────────────────────────
     register_blueprints(app)
+
+    # ── Request logging + monitoring counters ────────────────────
+    from routes.monitoring_routes import record_request
+
+    @app.before_request
+    def log_request():
+        logger.info("%s %s", request.method, request.path)
+
+    @app.after_request
+    def log_response(response):
+        logger.info("%s %s → %d", request.method, request.path, response.status_code)
+        record_request(response.status_code)
+        return response
 
     # ── Health check ────────────────────────────────────────────
     @app.route("/api/health")

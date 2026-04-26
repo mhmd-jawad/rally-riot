@@ -81,6 +81,24 @@ class OverlapService:
         return None
 
 
+def paginate(query, page: int = 1, per_page: int = 20):
+    """Return (items, meta) where meta contains pagination info.
+
+    Only kicks in when page > 0. Pass page=None to skip pagination.
+    per_page is clamped to [1, 100].
+    """
+    per_page = min(max(1, per_page), 100)
+    page = max(1, page)
+    total = query.count()
+    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    return items, {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
 class InvoiceService:
     """Generate invoices from registrations."""
 

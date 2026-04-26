@@ -9,6 +9,8 @@ from routes.invoice_routes import invoice_bp
 from routes.rsvp_attendance_routes import rsvp_bp, attendance_bp
 from routes.announcement_routes import announcement_bp
 from routes.notification_routes import notification_bp
+from routes.ai_routes import ai_bp
+from routes.monitoring_routes import monitoring_bp
 
 
 def register_blueprints(app):
@@ -23,3 +25,5 @@ def register_blueprints(app):
     app.register_blueprint(attendance_bp, url_prefix="/api/attendance")
     app.register_blueprint(announcement_bp, url_prefix="/api/announcements")
     app.register_blueprint(notification_bp, url_prefix="/api/notifications")
+    app.register_blueprint(ai_bp, url_prefix="/api/ai")
+    app.register_blueprint(monitoring_bp, url_prefix="/api/monitoring")

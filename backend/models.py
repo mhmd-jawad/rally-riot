@@ -38,7 +38,11 @@ class User(db.Model):
 
 class ParentChildLink(db.Model):
     __tablename__ = "parent_child_links"
-    __table_args__ = (db.UniqueConstraint("parent_user_id", "child_user_id"),)
+    __table_args__ = (
+        db.UniqueConstraint("parent_user_id", "child_user_id"),
+        db.Index("idx_pcl_parent", "parent_user_id"),
+        db.Index("idx_pcl_child", "child_user_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     parent_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     child_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -84,7 +88,10 @@ class Team(db.Model):
 
 class TeamCoach(db.Model):
     __tablename__ = "team_coaches"
-    __table_args__ = (db.UniqueConstraint("team_id", "coach_user_id"),)
+    __table_args__ = (
+        db.UniqueConstraint("team_id", "coach_user_id"),
+        db.Index("idx_tc_coach", "coach_user_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     coach_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -92,7 +99,11 @@ class TeamCoach(db.Model):
 
 class TeamPlayer(db.Model):
     __tablename__ = "team_players"
-    __table_args__ = (db.UniqueConstraint("team_id", "player_user_id"),)
+    __table_args__ = (
+        db.UniqueConstraint("team_id", "player_user_id"),
+        db.Index("idx_tp_player", "player_user_id"),
+        db.Index("idx_tp_team", "team_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -100,6 +111,11 @@ class TeamPlayer(db.Model):
 
 class Event(db.Model):
     __tablename__ = "events"
+    __table_args__ = (
+        db.Index("idx_event_team_start", "team_id", "start_time"),
+        db.Index("idx_event_court", "court"),
+        db.Index("idx_event_creator", "created_by_user_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -173,6 +189,11 @@ class RegistrationForm(db.Model):
 
 class Registration(db.Model):
     __tablename__ = "registrations"
+    __table_args__ = (
+        db.Index("idx_reg_form", "form_id"),
+        db.Index("idx_reg_player", "player_user_id"),
+        db.Index("idx_reg_parent", "parent_user_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     form_id = db.Column(db.Integer, db.ForeignKey("registration_forms.id"), nullable=False)
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -225,6 +246,9 @@ class WaiverFile(db.Model):
 
 class Invoice(db.Model):
     __tablename__ = "invoices"
+    __table_args__ = (
+        db.Index("idx_invoice_parent_status", "parent_user_id", "status"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     registration_id = db.Column(db.Integer, db.ForeignKey("registrations.id"), nullable=False)
     parent_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -264,7 +288,10 @@ class Invoice(db.Model):
 
 class RSVP(db.Model):
     __tablename__ = "rsvps"
-    __table_args__ = (db.UniqueConstraint("event_id", "player_user_id"),)
+    __table_args__ = (
+        db.UniqueConstraint("event_id", "player_user_id"),
+        db.Index("idx_rsvp_event", "event_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=False)
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -289,7 +316,10 @@ class RSVP(db.Model):
 
 class AttendanceRecord(db.Model):
     __tablename__ = "attendance_records"
-    __table_args__ = (db.UniqueConstraint("event_id", "player_user_id"),)
+    __table_args__ = (
+        db.UniqueConstraint("event_id", "player_user_id"),
+        db.Index("idx_att_event", "event_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     event_id = db.Column(db.Integer, db.ForeignKey("events.id"), nullable=False)
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -314,6 +344,9 @@ class AttendanceRecord(db.Model):
 
 class Announcement(db.Model):
     __tablename__ = "announcements"
+    __table_args__ = (
+        db.Index("idx_ann_team", "team_id"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
     coach_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -341,6 +374,9 @@ class Announcement(db.Model):
 
 class Notification(db.Model):
     __tablename__ = "notifications"
+    __table_args__ = (
+        db.Index("idx_notif_user_read", "user_id", "is_read"),
+    )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     type = db.Column(db.String, nullable=False)
