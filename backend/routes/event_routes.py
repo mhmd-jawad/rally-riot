@@ -6,7 +6,7 @@ import api_response
 from auth import authenticate, authorize
 from models import Event, Team, TeamCoach, TeamPlayer, ParentChildLink
 from extensions import db
-from services import OverlapService, NotificationService
+from services import OverlapService, NotificationService, paginate
 
 event_bp = Blueprint("events", __name__)
 
@@ -187,6 +187,9 @@ def delete_event(event_id):
 @authenticate
 def list_events():
     team_id = request.args.get("team_id", type=int)
+    page = request.args.get("page", type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+
     visible_team_ids = _visible_team_ids()
     if visible_team_ids is not None and team_id and team_id not in visible_team_ids:
         return api_response.forbidden("You do not have access to that team's events.")
@@ -198,7 +201,16 @@ def list_events():
         query = query.filter(Event.team_id.in_(visible_team_ids))
     if team_id:
         query = query.filter_by(team_id=team_id)
-    events = query.order_by(Event.start_time.asc()).all()
+    query = query.order_by(Event.start_time.asc())
+
+    if page:
+        events, meta = paginate(query, page, per_page)
+        return api_response.success({
+            "events": [e.to_dict(include_relations=True) for e in events],
+            "pagination": meta,
+        })
+
+    events = query.all()
     return api_response.success([e.to_dict(include_relations=True) for e in events])
 
 

@@ -35,3 +35,7 @@ def not_found(message="Not found"):
 
 def conflict(message="Conflict"):
     return error(message, 409)
+
+
+def server_error(message="Internal server error"):
+    return error(message, 500)

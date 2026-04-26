@@ -1,9 +1,10 @@
 """Notification routes."""
-from flask import Blueprint, g
+from flask import Blueprint, g, request
 
 import api_response
 from auth import authenticate
-from services import NotificationService
+from services import NotificationService, paginate
+from models import Notification
 
 notification_bp = Blueprint("notifications", __name__)
 
@@ -11,7 +12,23 @@ notification_bp = Blueprint("notifications", __name__)
 @notification_bp.route("/", methods=["GET"])
 @authenticate
 def list_notifications():
-    notifs = NotificationService.get_user_notifications(g.user["id"])
+    page = request.args.get("page", type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    unread_only = request.args.get("unread", "false").lower() == "true"
+
+    query = Notification.query.filter_by(user_id=g.user["id"])
+    if unread_only:
+        query = query.filter_by(is_read=False)
+    query = query.order_by(Notification.created_at.desc())
+
+    if page:
+        notifs, meta = paginate(query, page, per_page)
+        return api_response.success({
+            "notifications": [n.to_dict() for n in notifs],
+            "pagination": meta,
+        })
+
+    notifs = query.all()
     return api_response.success([n.to_dict() for n in notifs])
 
 

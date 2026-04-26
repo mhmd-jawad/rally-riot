@@ -22,3 +22,6 @@ class Config:
     MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 5 * 1024 * 1024))
     ALLOWED_MIME_TYPES = ["application/pdf", "image/png", "image/jpeg"]
     MAX_CONTENT_LENGTH = MAX_FILE_SIZE
+
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

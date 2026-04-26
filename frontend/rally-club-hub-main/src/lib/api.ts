@@ -194,5 +194,14 @@ export const notifications = {
     request("/notifications/read-all", { method: "PATCH" }),
 };
 
-const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications };
+// ── AI Chat ─────────────────────────────────────────────────
+export const ai = {
+  chat: (messages: Array<{ role: string; content: string }>) =>
+    request<{ success: boolean; data: { reply: string; role: string } }>("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
+};
+
+const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications, ai };
 export default api;

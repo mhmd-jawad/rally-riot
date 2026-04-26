@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Trophy, Link2, FileText, DollarSign,
-  Calendar, ClipboardCheck, Megaphone, User, CreditCard
+  Calendar, ClipboardCheck, Megaphone, User, CreditCard, Bot
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -84,6 +84,17 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {(role === "coach" || role === "parent" || role === "admin") && (
+          <div className="px-2 pb-2">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("rally:open-ai-chat"))}
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-400 hover:bg-sidebar-accent transition-colors border border-orange-500/20"
+            >
+              <Bot className="h-4 w-4 flex-shrink-0" />
+              {!collapsed && <span>AI Assistant</span>}
+            </button>
+          </div>
+        )}
         {!collapsed && profile && (
           <div className="mt-auto p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-2">
