@@ -162,6 +162,32 @@ _T_GET_MY_ATTENDANCE = _tool(
     "Get the player's own attendance history across all events.",
 )
 
+# ── Coach / Admin write ───────────────────────────────────────────────────────
+_T_ADD_PLAYER_TO_TEAM = _tool(
+    "add_player_to_team",
+    "Add a player to a team. Use list_users(role='player') first to find the player's ID.",
+    {
+        "team_id":        {"type": "integer"},
+        "player_user_id": {"type": "integer"},
+    },
+    ["team_id", "player_user_id"],
+)
+_T_REMOVE_PLAYER_FROM_TEAM = _tool(
+    "remove_player_from_team",
+    "Remove a player from a team.",
+    {
+        "team_id":        {"type": "integer"},
+        "player_user_id": {"type": "integer"},
+    },
+    ["team_id", "player_user_id"],
+)
+_T_DELETE_EVENT = _tool(
+    "delete_event",
+    "Delete / cancel an event. Use get_my_events first to find the event ID.",
+    {"event_id": {"type": "integer"}},
+    ["event_id"],
+)
+
 # ── Admin ─────────────────────────────────────────────────────────────────────
 _T_LIST_USERS = _tool(
     "list_users",
@@ -173,13 +199,23 @@ _T_LIST_REGISTRATIONS = _tool(
     "List registration submissions. Optionally filter by status (pending, approved, rejected).",
     {"status": {"type": "string", "enum": ["pending", "approved", "rejected"]}},
 )
+_T_UPDATE_REGISTRATION_STATUS = _tool(
+    "update_registration_status",
+    "Approve or reject a registration submission.",
+    {
+        "registration_id": {"type": "integer"},
+        "status":          {"type": "string", "enum": ["approved", "rejected"]},
+    },
+    ["registration_id", "status"],
+)
 
 
 _COACH_TOOLS = [
     _T_GET_COURTS, _T_GET_TEAMS, _T_GET_MY_EVENTS,
     _T_GET_TEAM_PLAYERS, _T_GET_EVENT_RSVPS, _T_GET_EVENT_ATTENDANCE,
     _T_CREATE_ANNOUNCEMENT, _T_GET_ANNOUNCEMENTS,
-    _T_BOOK_EVENT, _T_RESCHEDULE_EVENT, _T_GET_ALT_SLOTS,
+    _T_BOOK_EVENT, _T_RESCHEDULE_EVENT, _T_DELETE_EVENT, _T_GET_ALT_SLOTS,
+    _T_ADD_PLAYER_TO_TEAM, _T_REMOVE_PLAYER_FROM_TEAM,
 ]
 _PARENT_TOOLS = [
     _T_GET_CHILD_SCHEDULE, _T_GET_MY_CHILDREN,
@@ -192,6 +228,7 @@ _PLAYER_TOOLS = [
 _ADMIN_TOOLS = _COACH_TOOLS + [
     _T_GET_CHILD_SCHEDULE, _T_GET_MY_CHILDREN,
     _T_CHECK_BALANCE, _T_LIST_USERS, _T_LIST_REGISTRATIONS,
+    _T_UPDATE_REGISTRATION_STATUS,
 ]
 
 _TOOLS_BY_ROLE = {
@@ -564,6 +601,66 @@ def _execute_tool(name, inputs, user):
         regs = q.order_by(Registration.submitted_at.desc()).limit(50).all()
         return {"registrations": [r.to_dict(include_relations=True) for r in regs], "count": len(regs)}
 
+    # ── add_player_to_team ─────────────────────────────────────
+    if name == "add_player_to_team":
+        if role not in ("coach", "admin"):
+            return {"error": "Only coaches and admins can add players to teams."}
+        team_id = inputs.get("team_id")
+        player_id = inputs.get("player_user_id")
+        if role == "coach" and not TeamCoach.query.filter_by(team_id=team_id, coach_user_id=uid).first():
+            return {"error": "You are not the coach of this team."}
+        player = User.query.filter_by(id=player_id, role="player").first()
+        if not player:
+            return {"error": f"No player found with ID {player_id}."}
+        if TeamPlayer.query.filter_by(team_id=team_id, player_user_id=player_id).first():
+            return {"error": f"{player.full_name} is already on this team."}
+        db.session.add(TeamPlayer(team_id=team_id, player_user_id=player_id))
+        db.session.commit()
+        team = Team.query.get(team_id)
+        return {"success": True, "message": f"{player.full_name} has been added to {team.name}."}
+
+    # ── remove_player_from_team ────────────────────────────────
+    if name == "remove_player_from_team":
+        if role not in ("coach", "admin"):
+            return {"error": "Only coaches and admins can remove players from teams."}
+        team_id = inputs.get("team_id")
+        player_id = inputs.get("player_user_id")
+        if role == "coach" and not TeamCoach.query.filter_by(team_id=team_id, coach_user_id=uid).first():
+            return {"error": "You are not the coach of this team."}
+        membership = TeamPlayer.query.filter_by(team_id=team_id, player_user_id=player_id).first()
+        if not membership:
+            return {"error": "This player is not on this team."}
+        db.session.delete(membership)
+        db.session.commit()
+        player = User.query.get(player_id)
+        team   = Team.query.get(team_id)
+        return {"success": True, "message": f"{player.full_name} has been removed from {team.name}."}
+
+    # ── delete_event ───────────────────────────────────────────
+    if name == "delete_event":
+        if role not in ("coach", "admin"):
+            return {"error": "Only coaches and admins can delete events."}
+        evt = Event.query.get(inputs.get("event_id"))
+        if not evt:
+            return {"error": "Event not found."}
+        if role == "coach" and not TeamCoach.query.filter_by(team_id=evt.team_id, coach_user_id=uid).first():
+            return {"error": "You are not the coach of this team."}
+        title = evt.title
+        db.session.delete(evt)
+        db.session.commit()
+        return {"success": True, "message": f"Event '{title}' has been deleted."}
+
+    # ── update_registration_status ─────────────────────────────
+    if name == "update_registration_status":
+        if role != "admin":
+            return {"error": "Only admins can update registration status."}
+        reg = Registration.query.get(inputs.get("registration_id"))
+        if not reg:
+            return {"error": "Registration not found."}
+        reg.status = inputs.get("status")
+        db.session.commit()
+        return {"success": True, "registration": reg.to_dict(include_relations=True)}
+
     return {"error": f"Unknown tool: {name}"}
 
 
@@ -585,7 +682,13 @@ def _system_prompt(user):
         "3. If a tool returns an empty list, say exactly that — don't guess or suggest alternatives from imagination.\n"
         "4. Format dates as human-readable ('Tuesday May 6 at 2:00 PM'). Format money with $.\n"
         "5. On scheduling conflict → call get_alternative_slots immediately and list the options.\n"
-        "6. After any write action (booking, RSVP, announcement) confirm success with the returned details.\n\n"
+        "6. After any write action (booking, RSVP, announcement, add/remove player) confirm success "
+        "with the exact details returned by the tool.\n"
+        "7. CRITICAL: If a tool returns an 'error' field, you MUST tell the user the exact error. "
+        "NEVER say an action was completed if the tool returned an error or if you did not call a tool.\n"
+        "8. CRITICAL: If the user asks you to do something you have no tool for, say explicitly: "
+        "'I don't have the ability to [action] through this chat. Please use the platform interface instead.' "
+        "Never pretend to perform an action without a successful tool call.\n\n"
     )
 
     tool_docs = {
@@ -601,7 +704,10 @@ def _system_prompt(user):
             "- create_announcement(team_id, title, message) → post to a team\n"
             "- book_event(team_id, event_type, title, court, start_time, end_time) → create event\n"
             "- reschedule_event(event_id, [start_time], [end_time], [court]) → move an event\n"
+            "- delete_event(event_id) → cancel/delete an event\n"
             "- get_alternative_slots(court, team_id, duration_minutes, preferred_date) → free slots\n"
+            "- add_player_to_team(team_id, player_user_id) → add a player to your team\n"
+            "- remove_player_from_team(team_id, player_user_id) → remove a player from your team\n"
         ),
         "parent": (
             "## Your tools:\n"
@@ -622,10 +728,12 @@ def _system_prompt(user):
             "## Your tools (full access):\n"
             "- get_courts, get_teams, get_my_events, get_team_players\n"
             "- get_event_rsvps, get_event_attendance, get_announcements, create_announcement\n"
-            "- book_event, reschedule_event, get_alternative_slots\n"
+            "- book_event, reschedule_event, delete_event, get_alternative_slots\n"
+            "- add_player_to_team(team_id, player_user_id), remove_player_from_team(team_id, player_user_id)\n"
             "- get_my_children, get_child_schedule, check_balance\n"
             "- list_users([role]) → all club members, filterable by role\n"
             "- list_registrations([status]) → registration submissions\n"
+            "- update_registration_status(registration_id, status) → approve or reject a registration\n"
         ),
     }
 
