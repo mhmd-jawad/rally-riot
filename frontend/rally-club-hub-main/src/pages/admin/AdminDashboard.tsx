@@ -20,17 +20,15 @@ export default function AdminDashboard() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => {
-      const [usersRes, teamsRes, formsRes, invoicesRes, eventsRes, annRes] = await Promise.all([
-        api.users.list(),
-        api.teams.list(),
-        api.registrations.listForms(),
-        api.invoices.list(),
-        api.events.list(),
-        api.announcements.list(),
-      ]);
+      const usersRes = await api.users.list();
+      const teamsRes = await api.teams.list();
+      const formsRes = await api.registrations.listForms();
+      const invoicesRes = await api.invoices.list();
+      const eventsRes = await api.events.list({ upcoming: true, limit: 5 });
+      const annRes = await api.announcements.list();
       const activeForms = (formsRes.data || []).filter((f: any) => f.is_active).length;
       const unpaidInvoices = (invoicesRes.data.invoices || []).filter((i: any) => i.status !== "paid").length;
-      const upcomingEvents = (eventsRes.data || []).filter((e: any) => parseUTC(e.start_time) >= new Date()).slice(0, 5);
+      const upcomingEvents = (eventsRes.data || []).slice(0, 5);
       const recentAnnouncements = (annRes.data || []).slice(0, 5);
       return {
         totalUsers: (usersRes.data || []).length,

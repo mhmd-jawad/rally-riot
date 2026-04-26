@@ -61,6 +61,15 @@ def create_app(config_class=Config):
     # ── Create tables, upload dir & auto-seed ───────────────────
     with app.app_context():
         import models  # noqa: F401 – ensures all models are registered
+        import models_community  # noqa: F401 – community hub models
+        # Enable WAL mode so reads never block each other under concurrent requests
+        from sqlalchemy import event as sa_event, text
+        from extensions import db as _db
+        @sa_event.listens_for(_db.engine, "connect")
+        def set_wal(dbapi_conn, _):
+            dbapi_conn.execute("PRAGMA journal_mode=WAL")
+            dbapi_conn.execute("PRAGMA synchronous=NORMAL")
+            dbapi_conn.execute("PRAGMA busy_timeout=5000")
         db.create_all()
         os.makedirs(app.config.get("UPLOAD_DIR", "./uploads"), exist_ok=True)
         from seed import seed

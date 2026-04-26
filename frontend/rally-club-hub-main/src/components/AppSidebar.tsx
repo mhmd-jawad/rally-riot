@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Trophy, Link2, FileText, DollarSign,
-  Calendar, ClipboardCheck, Megaphone, User, CreditCard, Bot, BarChart3
+  Calendar, ClipboardCheck, Megaphone, User, CreditCard, Bot, BarChart3, MessageSquare
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ const adminItems = [
   { title: "Finance", url: "/admin/finance", icon: DollarSign },
   { title: "Attendance", url: "/admin/attendance", icon: BarChart3 },
   { title: "Events", url: "/admin/events", icon: Calendar },
+  { title: "Community Hub", url: "/admin/community", icon: MessageSquare },
 ];
 
 const coachItems = [
@@ -25,6 +26,7 @@ const coachItems = [
   { title: "Events", url: "/coach/events", icon: Calendar },
   { title: "Attendance", url: "/coach/attendance", icon: ClipboardCheck },
   { title: "Announcements", url: "/coach/announcements", icon: Megaphone },
+  { title: "Community Hub", url: "/coach/community", icon: MessageSquare },
 ];
 
 const parentItems = [
@@ -32,11 +34,13 @@ const parentItems = [
   { title: "Child Schedule", url: "/parent/schedule", icon: Calendar },
   { title: "Registration", url: "/parent/registration", icon: FileText },
   { title: "Payments", url: "/parent/payments", icon: CreditCard },
+  { title: "Community Hub", url: "/parent/community", icon: MessageSquare },
 ];
 
 const playerItems = [
   { title: "Dashboard", url: "/player", icon: LayoutDashboard },
   { title: "My Schedule", url: "/player/schedule", icon: Calendar },
+  { title: "Community Hub", url: "/player/community", icon: MessageSquare },
 ];
 
 export function AppSidebar() {

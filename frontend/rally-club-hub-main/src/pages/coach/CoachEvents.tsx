@@ -10,15 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+
+type ConflictInfo = { type: string; message: string; conflicting_event_id?: number } | null;
 
 export default function CoachEvents() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [conflict, setConflict] = useState<ConflictInfo>(null);
   const [form, setForm] = useState({
     team_id: "", event_type: "practice", title: "", description: "", court: "",
     start_time: "", end_time: "",
@@ -37,6 +41,19 @@ export default function CoachEvents() {
   const resetForm = () => {
     setForm({ team_id: "", event_type: "practice", title: "", description: "", court: "", start_time: "", end_time: "" });
     setEditing(null);
+    setConflict(null);
+  };
+
+  const formErrors = (): string[] => {
+    const errs: string[] = [];
+    if (!form.title.trim()) errs.push("Title is required.");
+    if (!form.team_id) errs.push("Team is required.");
+    if (!form.court.trim()) errs.push("Court is required.");
+    if (!form.start_time) errs.push("Start time is required.");
+    if (!form.end_time) errs.push("End time is required.");
+    if (form.start_time && form.end_time && form.start_time >= form.end_time)
+      errs.push("End time must be after start time.");
+    return errs;
   };
 
   const createMutation = useMutation({
@@ -47,7 +64,14 @@ export default function CoachEvents() {
       setOpen(false);
       resetForm();
     },
-    onError: (e: any) => toast({ title: "Scheduling conflict", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      const data = e.data?.data;
+      if (e.status === 409 && data?.type) {
+        setConflict({ type: data.type, message: data.message, conflicting_event_id: data.conflicting_event_id });
+      } else {
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+      }
+    },
   });
 
   const updateMutation = useMutation({
@@ -58,7 +82,14 @@ export default function CoachEvents() {
       setOpen(false);
       resetForm();
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      const data = e.data?.data;
+      if (e.status === 409 && data?.type) {
+        setConflict({ type: data.type, message: data.message, conflicting_event_id: data.conflicting_event_id });
+      } else {
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+      }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -72,6 +103,7 @@ export default function CoachEvents() {
 
   const handleEdit = (event: any) => {
     setEditing(event);
+    setConflict(null);
     setForm({
       team_id: String(event.team_id),
       event_type: event.event_type,
@@ -82,6 +114,22 @@ export default function CoachEvents() {
       end_time: event.end_time?.slice(0, 16) || "",
     });
     setOpen(true);
+  };
+
+  const handleSubmit = () => {
+    setConflict(null);
+    const errs = formErrors();
+    if (errs.length > 0) {
+      toast({ title: "Validation error", description: errs[0], variant: "destructive" });
+      return;
+    }
+    editing ? updateMutation.mutate() : createMutation.mutate();
+  };
+
+  const conflictLabel: Record<string, string> = {
+    court: "Court conflict",
+    team: "Team schedule conflict",
+    coach: "Your schedule conflict",
   };
 
   const typeColor: Record<string, string> = {
@@ -107,12 +155,26 @@ export default function CoachEvents() {
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>{editing ? "Edit Event" : "Create Event"}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
-              <div><Label>Title</Label><Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
+
+              {conflict && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <p className="font-semibold">{conflictLabel[conflict.type] || "Scheduling conflict"}</p>
+                    <p className="text-sm mt-1">{conflict.message}</p>
+                    {conflict.type === "court" && (
+                      <p className="text-xs mt-1 opacity-75">Try a different court or choose a different time slot.</p>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div><Label>Title <span className="text-destructive">*</span></Label><Input value={form.title} onChange={e => { setForm(p => ({ ...p, title: e.target.value })); setConflict(null); }} /></div>
               <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Team</Label>
-                  <Select value={form.team_id} onValueChange={v => setForm(p => ({ ...p, team_id: v }))}>
+                  <Label>Team <span className="text-destructive">*</span></Label>
+                  <Select value={form.team_id} onValueChange={v => { setForm(p => ({ ...p, team_id: v })); setConflict(null); }}>
                     <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
                     <SelectContent>{(teams as any[]).map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
@@ -130,14 +192,38 @@ export default function CoachEvents() {
                   </Select>
                 </div>
               </div>
-              <div><Label>Court</Label><Input placeholder="e.g. Court A" value={form.court} onChange={e => setForm(p => ({ ...p, court: e.target.value }))} /></div>
+              <div>
+                <Label>Court <span className="text-destructive">*</span></Label>
+                <Input
+                  placeholder="e.g. Court A"
+                  value={form.court}
+                  onChange={e => { setForm(p => ({ ...p, court: e.target.value })); setConflict(null); }}
+                  className={conflict?.type === "court" ? "border-destructive" : ""}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Start Time</Label><Input type="datetime-local" value={form.start_time} onChange={e => setForm(p => ({ ...p, start_time: e.target.value }))} /></div>
-                <div><Label>End Time</Label><Input type="datetime-local" value={form.end_time} onChange={e => setForm(p => ({ ...p, end_time: e.target.value }))} /></div>
+                <div>
+                  <Label>Start Time <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="datetime-local"
+                    value={form.start_time}
+                    onChange={e => { setForm(p => ({ ...p, start_time: e.target.value })); setConflict(null); }}
+                    className={conflict?.type === "team" || conflict?.type === "coach" ? "border-destructive" : ""}
+                  />
+                </div>
+                <div>
+                  <Label>End Time <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="datetime-local"
+                    value={form.end_time}
+                    onChange={e => { setForm(p => ({ ...p, end_time: e.target.value })); setConflict(null); }}
+                    className={conflict?.type === "team" || conflict?.type === "coach" ? "border-destructive" : ""}
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => editing ? updateMutation.mutate() : createMutation.mutate()} disabled={createMutation.isPending || updateMutation.isPending}>
+              <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
                 {editing ? "Update" : "Create"}
               </Button>
             </DialogFooter>
@@ -151,9 +237,10 @@ export default function CoachEvents() {
           <Card key={event.id}>
             <CardContent className="flex items-center justify-between py-4">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium">{event.title}</p>
                   <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
+                  {event.team && <Badge variant="outline" className="text-xs">{event.team.name}</Badge>}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {event.court || "TBD"} • {event.start_time ? format(parseUTC(event.start_time), "MMM d, h:mm a") : "—"} – {event.end_time ? format(parseUTC(event.end_time), "h:mm a") : "—"}

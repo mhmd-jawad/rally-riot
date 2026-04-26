@@ -26,9 +26,18 @@ import ParentRegistration from "./pages/parent/ParentRegistration";
 import ParentPayments from "./pages/parent/ParentPayments";
 import PlayerDashboard from "./pages/player/PlayerDashboard";
 import PlayerSchedule from "./pages/player/PlayerSchedule";
+import CommunityHub from "./pages/community/CommunityHub";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,       // treat data as fresh for 30s — no refetch on re-mount
+      retry: 1,                // only retry once on failure
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -51,6 +60,7 @@ const App = () => (
               <Route path="/admin/finance" element={<AdminFinance />} />
               <Route path="/admin/attendance" element={<AdminAttendance />} />
               <Route path="/admin/events" element={<AdminEvents />} />
+              <Route path="/admin/community" element={<CommunityHub />} />
             </Route>
 
             <Route element={<AppLayout allowedRoles={["coach"]} />}>
@@ -58,6 +68,7 @@ const App = () => (
               <Route path="/coach/events" element={<CoachEvents />} />
               <Route path="/coach/attendance" element={<CoachAttendance />} />
               <Route path="/coach/announcements" element={<CoachAnnouncements />} />
+              <Route path="/coach/community" element={<CommunityHub />} />
             </Route>
 
             <Route element={<AppLayout allowedRoles={["parent"]} />}>
@@ -65,11 +76,13 @@ const App = () => (
               <Route path="/parent/schedule" element={<ParentSchedule />} />
               <Route path="/parent/registration" element={<ParentRegistration />} />
               <Route path="/parent/payments" element={<ParentPayments />} />
+              <Route path="/parent/community" element={<CommunityHub />} />
             </Route>
 
             <Route element={<AppLayout allowedRoles={["player"]} />}>
               <Route path="/player" element={<PlayerDashboard />} />
               <Route path="/player/schedule" element={<PlayerSchedule />} />
+              <Route path="/player/community" element={<CommunityHub />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

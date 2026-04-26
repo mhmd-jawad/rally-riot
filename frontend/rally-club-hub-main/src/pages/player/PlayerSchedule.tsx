@@ -1,10 +1,12 @@
 import { parseUTC } from "@/lib/utils";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, MapPin, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -13,11 +15,21 @@ export default function PlayerSchedule() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [teamFilter, setTeamFilter] = useState("all");
 
-  const { data: events = [], isLoading } = useQuery({
+  const { data: teams = [] } = useQuery({
+    queryKey: ["my-teams"],
+    queryFn: async () => (await api.teams.myTeams()).data || [],
+  });
+
+  const { data: allEvents = [], isLoading } = useQuery({
     queryKey: ["my-calendar"],
     queryFn: async () => (await api.events.myCalendar()).data || [],
   });
+
+  const events = teamFilter === "all"
+    ? allEvents
+    : (allEvents as any[]).filter((e: any) => String(e.team_id) === teamFilter);
 
   const rsvpMutation = useMutation({
     mutationFn: ({ eventId, status }: { eventId: number; status: string }) =>
@@ -32,13 +44,35 @@ export default function PlayerSchedule() {
   const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
   const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
 
+  const typeColor: Record<string, string> = {
+    practice: "bg-blue-100 text-blue-800",
+    match: "bg-green-100 text-green-800",
+    tryout: "bg-purple-100 text-purple-800",
+    tournament: "bg-orange-100 text-orange-800",
+  };
+
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold">My Schedule</h1>
-        <p className="text-muted-foreground">View and RSVP to your events</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">My Schedule</h1>
+          <p className="text-muted-foreground">View and RSVP to your events</p>
+        </div>
+        {(teams as any[]).length > 1 && (
+          <Select value={teamFilter} onValueChange={setTeamFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="All teams" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All teams</SelectItem>
+              {(teams as any[]).map((t: any) => (
+                <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div>
@@ -52,18 +86,24 @@ export default function PlayerSchedule() {
                 <CardContent className="py-4">
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         <p className="font-medium">{event.title}</p>
-                        <Badge variant="outline">{event.event_type}</Badge>
+                        <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
+                        {event.team && (
+                          <Badge variant="outline" className="text-xs">{event.team.name}</Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(event.start_time), "MMM d, h:mm a")} – {format(parseUTC(event.end_time), "h:mm a")}</span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {format(parseUTC(event.start_time), "MMM d, h:mm a")} – {format(parseUTC(event.end_time), "h:mm a")}
+                        </span>
                       </div>
                       {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0 ml-4">
                       <Button size="sm" variant="outline" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "attending" })}>Going</Button>
                       <Button size="sm" variant="ghost" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "maybe" })}>Maybe</Button>
                       <Button size="sm" variant="ghost" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "not_attending" })}>Can't go</Button>
@@ -85,7 +125,8 @@ export default function PlayerSchedule() {
                 <CardContent className="py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm">{event.title}</p>
-                    <Badge variant="outline">{event.event_type}</Badge>
+                    <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
+                    {event.team && <span className="text-xs text-muted-foreground">{event.team.name}</span>}
                   </div>
                   <span className="text-xs text-muted-foreground">{format(parseUTC(event.start_time), "MMM d, h:mm a")}</span>
                 </CardContent>

@@ -7,10 +7,10 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 const demoAccounts = [
-  { label: "Admin", email: "admin@rallyriot.com", password: "Password1!", gradient: "from-orange-500 to-red-500" },
-  { label: "Coach", email: "coach@rallyriot.com", password: "Password1!", gradient: "from-blue-500 to-cyan-500" },
-  { label: "Parent", email: "parent1@rallyriot.com", password: "Password1!", gradient: "from-green-500 to-emerald-500" },
-  { label: "Player", email: "player1@rallyriot.com", password: "Password1!", gradient: "from-yellow-500 to-amber-500" },
+  { label: "Admin",  email: "admin@rallyriot.com", password: "Demo1234!", gradient: "from-orange-500 to-red-500" },
+  { label: "Coach",  email: "ali@rallyriot.com",   password: "Demo1234!", gradient: "from-blue-500 to-cyan-500" },
+  { label: "Parent", email: "ahmad@rallyriot.com", password: "Demo1234!", gradient: "from-green-500 to-emerald-500" },
+  { label: "Player", email: "omar@rallyriot.com",  password: "Demo1234!", gradient: "from-yellow-500 to-amber-500" },
 ];
 
 export default function LoginPage() {
@@ -131,7 +131,7 @@ export default function LoginPage() {
           </div>
           <p className="text-xs text-orange-100/30 mt-4 text-center">
             All demo passwords:{" "}
-            <code className="bg-white/10 px-1.5 py-0.5 rounded text-orange-200/60">Password1!</code>
+            <code className="bg-white/10 px-1.5 py-0.5 rounded text-orange-200/60">Demo1234!</code>
           </p>
         </div>
 

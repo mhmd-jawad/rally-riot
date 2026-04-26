@@ -33,8 +33,11 @@ def not_found(message="Not found"):
     return error(message, 404)
 
 
-def conflict(message="Conflict"):
-    return error(message, 409)
+def conflict(message="Conflict", data=None):
+    resp = {"success": False, "message": message}
+    if data is not None:
+        resp["data"] = data
+    return jsonify(resp), 409
 
 
 def server_error(message="Internal server error"):
