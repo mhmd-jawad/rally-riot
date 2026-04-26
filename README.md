@@ -180,14 +180,17 @@ cd backend
 python seed.py
 ```
 
-The seed script creates:
-- 8 user accounts (admin, 2 coaches, 3 players, 2 parents)
-- 2 parent-child links
-- 2 teams with coach/player assignments
-- 3 sample events
-- 2 registration forms
+The seed script creates background club data to make the demo feel real:
+- 1 admin account + 3 parent accounts (all loginable)
+- 3 teams (Thunder U16, Lightning U14, Storm Beginners)
+- 7 events (2 past with attendance history, 5 upcoming)
+- 3 registration forms with discounts
+- 4 registrations + invoices (paid, installment, pending, overdue)
+- Attendance records, RSVPs, announcements, community posts
 
-`python app.py` also runs the seed routine automatically when the database is empty, so `python seed.py` is optional for a fresh local setup.
+**Coaches and players are not pre-seeded as login accounts.** They are created live during the demo by the admin, which demonstrates the account creation and role assignment flow. Sample historical data (events, attendance, registrations) references internal placeholder records so the club looks active from day one.
+
+`python app.py` also runs the seed routine automatically when the database is empty.
 
 ---
 
@@ -339,44 +342,64 @@ Public sign-up is disabled in the functional demo build. Admins create accounts 
 
 ## Demo Accounts
 
-| Role    | Name            | Email                  | Password    |
-|---------|-----------------|------------------------|-------------|
-| Admin   | Admin User      | admin@rallyriot.com    | Password1!  |
-| Coach   | Coach Williams  | coach@rallyriot.com    | Password1!  |
-| Coach   | Coach Johnson   | coach2@rallyriot.com   | Password1!  |
-| Parent  | Parent Kim      | parent1@rallyriot.com  | Password1!  |
-| Parent  | Parent Sam      | parent2@rallyriot.com  | Password1!  |
-| Player  | Player Alex     | player1@rallyriot.com  | Password1!  |
-| Player  | Player Jordan   | player2@rallyriot.com  | Password1!  |
-| Player  | Player Casey    | player3@rallyriot.com  | Password1!  |
+These accounts are ready to log in immediately after seeding:
+
+| Role   | Name              | Email                 | Password   |
+|--------|-------------------|-----------------------|------------|
+| Admin  | Mohammad Al-Admin | admin@rallyriot.com   | Password1! |
+| Parent | Ahmad Al-Rashid   | ahmad@rallyriot.com   | Password1! |
+| Parent | Fatima Khalil     | fatima@rallyriot.com  | Password1! |
+| Parent | Nour Mansour      | nour@rallyriot.com    | Password1! |
+
+**Coaches and players are created live during the demo** via Admin → Users. Suggested credentials to use during the demo:
+
+| Role   | Suggested email          | Password   |
+|--------|--------------------------|------------|
+| Coach  | coach@rallyriot.com      | Password1! |
+| Player | player@rallyriot.com     | Password1! |
 
 **Pre-configured relationships:**
-- Parent Kim is linked to Player Alex
-- Parent Sam is linked to Player Jordan
-- Coach Williams is assigned to Team "Thunder U14"
-- Coach Johnson is assigned to Team "Lightning U16"
+- Ahmad is linked to two sample players (Omar + Ziad) — paid invoice + pending invoice
+- Fatima is linked to a sample player (Sara) — installment plan, 1 payment due
+- Nour is linked to a sample player (Karim) — overdue invoice
 
 ---
 
 ## Demo Flow
 
-The following end-to-end flow works with the seeded data:
+### Step 1 — Admin sets the scene
+- Log in as `admin@rallyriot.com`
+- Show the dashboard: teams, upcoming events, finance summary, community posts all exist as background data
 
-1. **Admin logs in** → `POST /api/auth/login`
-2. **Admin creates accounts** → `POST /api/users`
-3. **Admin assigns roles** → `PATCH /api/users/:id/role`
-4. **Admin creates team + assigns coach** → `POST /api/teams` + `POST /api/teams/:id/coaches`
-5. **Parent links to child** → `POST /api/parent-child`
-6. **Coach creates practice** → `POST /api/events`
-7. **Conflicting event rejected** → `POST /api/events` returns 409
-8. **Player views calendar** → `GET /api/events/my/calendar`
-9. **Parent views child schedule** → `GET /api/events/child/:childId/schedule`
-10. **Admin creates registration form** → `POST /api/registrations/forms`
-11. **Parent registers child + uploads waiver** → `POST /api/registrations` + `POST /api/registrations/:id/waivers`
-12. **Invoice auto-generated** → included in registration response
-13. **Parent views balance** → `GET /api/invoices`
-14. **Player/Parent RSVP** → `POST /api/rsvps`
-15. **Coach marks attendance** → `POST /api/attendance`
+### Step 2 — Create a Coach (live)
+- Admin → Users → Create account (e.g. `coach@rallyriot.com`, role: Coach)
+- Admin → Teams → Assign the new coach to **Thunder U16**
+
+### Step 3 — Log in as the new Coach
+- Show My Teams → Thunder U16 roster and priority level
+- Create a new practice event → demonstrate conflict detection if the court is already booked
+- Post an announcement to the team
+
+### Step 4 — Create a Player (live)
+- Log back in as admin
+- Admin → Users → Create account (e.g. `player@rallyriot.com`, role: Player)
+- Admin → Teams → Assign the new player to **Thunder U16**
+
+### Step 5 — Log in as the new Player
+- Show My Schedule and Calendar → Thunder U16 events appear immediately
+- RSVP to an upcoming practice
+- Check Court Calendar → see court reservations
+
+### Step 6 — Show Parent experience
+- Log in as `ahmad@rallyriot.com`
+- Show child schedules (Omar + Ziad), RSVP on behalf of child
+- Show Payments → paid invoice, pending invoice, overdue invoice with installment breakdown
+
+### Step 7 — Back to Admin
+- Registrations → approve/reject pending registration
+- Finance → Send Payment Reminders
+- Dashboard → Send Event Reminders
+- Attendance summary per player
 16. **Coach posts announcement** → `POST /api/announcements`
 17. **Event update triggers notifications** → `PUT /api/events/:id` → `GET /api/notifications`
 

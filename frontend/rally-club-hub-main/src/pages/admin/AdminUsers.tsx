@@ -17,10 +17,11 @@ export default function AdminUsers() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", email: "", password: "", role: "player" });
 
-  const { data: users = [], isLoading } = useQuery({
+  const { data: rawUsers = [], isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: async () => (await api.users.list()).data || [],
   });
+  const users = (rawUsers as any[]).filter((u: any) => !u.email.endsWith(".internal"));
 
   const createMutation = useMutation({
     mutationFn: () => api.users.create(form),

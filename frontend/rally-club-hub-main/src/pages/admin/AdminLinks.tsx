@@ -44,8 +44,9 @@ export default function AdminLinks() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const parents = (users as any[]).filter((u: any) => u.role === "parent");
-  const players = (users as any[]).filter((u: any) => u.role === "player");
+  const realUsers = (users as any[]).filter((u: any) => !u.email.endsWith(".internal"));
+  const parents = realUsers.filter((u: any) => u.role === "parent");
+  const players = realUsers.filter((u: any) => u.role === "player");
 
   // Identify which players are already linked to avoid duplicate suggestions
   const linkedPlayerIds = new Set((links as any[]).map((l: any) => l.child_user_id));

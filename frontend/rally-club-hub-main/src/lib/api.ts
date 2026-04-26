@@ -96,7 +96,7 @@ export const auth = {
       body: JSON.stringify({ email, password }),
     }),
   register: (email: string, password: string, full_name: string, role: string) =>
-    request("/auth/register", {
+    request<{ success: boolean; data: { token: string; user: any } }>("/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password, full_name, role }),
     }),
@@ -112,6 +112,10 @@ export const users = {
     request("/users/", { method: "POST", body: JSON.stringify(data) }),
   assignRole: (userId: number, role: string) =>
     request(`/users/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  myWallet: () =>
+    request<{ success: boolean; data: { wallet_balance: number } }>("/users/me/wallet"),
+  topUpWallet: (userId: number, amount: number) =>
+    request(`/users/${userId}/wallet`, { method: "PATCH", body: JSON.stringify({ amount }) }),
 };
 
 // ── Teams ───────────────────────────────────────────────────
@@ -278,6 +282,7 @@ export const announcements = {
 export const notifications = {
   list: () => request<{ success: boolean; data: any[] }>("/notifications/"),
   sendReminders: () => request<{ success: boolean; message: string }>("/notifications/send-reminders", { method: "POST" }),
+  sendPaymentReminders: () => request<{ success: boolean; data: { invoices_notified: number }; message: string }>("/notifications/send-payment-reminders", { method: "POST" }),
   markRead: (id: number) =>
     request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () =>

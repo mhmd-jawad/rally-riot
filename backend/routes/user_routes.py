@@ -63,6 +63,7 @@ def list_users():
         "email": u.email,
         "role": u.role,
         "is_active": u.is_active,
+        "wallet_balance": round(float(u.wallet_balance or 0), 2),
         "created_at": u.created_at.isoformat() if u.created_at else None,
     } for u in users])
 
@@ -82,6 +83,40 @@ def get_user(user_id):
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     })
+
+
+@user_bp.route("/me/wallet", methods=["GET"])
+@authenticate
+def my_wallet():
+    """Return the current user's wallet balance."""
+    user = User.query.get(g.user["id"])
+    if not user:
+        return api_response.not_found("User not found.")
+    return api_response.success({"wallet_balance": round(float(user.wallet_balance or 0), 2)})
+
+
+@user_bp.route("/<int:user_id>/wallet", methods=["PATCH"])
+@authenticate
+@authorize("admin")
+def top_up_wallet(user_id):
+    """Admin adds funds to a user's wallet."""
+    user = User.query.get(user_id)
+    if not user:
+        return api_response.not_found("User not found.")
+
+    data = request.get_json(silent=True) or {}
+    amount = data.get("amount")
+    if amount is None or not isinstance(amount, (int, float)) or amount <= 0:
+        return api_response.bad_request("Validation failed.", [
+            {"field": "amount", "message": "amount must be a positive number."}
+        ])
+
+    user.wallet_balance = round(float(user.wallet_balance or 0) + float(amount), 2)
+    db.session.commit()
+    return api_response.success(
+        {"id": user.id, "full_name": user.full_name, "wallet_balance": user.wallet_balance},
+        f"${amount:.2f} added to {user.full_name}'s wallet.",
+    )
 
 
 @user_bp.route("/<int:user_id>/role", methods=["PATCH"])

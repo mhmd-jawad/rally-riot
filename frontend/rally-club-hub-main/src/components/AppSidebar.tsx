@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Trophy, Link2, FileText, DollarSign,
-  Calendar, ClipboardCheck, Megaphone, User, CreditCard, Bot, BarChart3, MessageSquare
+  Calendar, CalendarDays, ClipboardCheck, Megaphone, User, CreditCard, Bot, BarChart3, MessageSquare, MapPin
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,12 +18,16 @@ const adminItems = [
   { title: "Finance", url: "/admin/finance", icon: DollarSign },
   { title: "Attendance", url: "/admin/attendance", icon: BarChart3 },
   { title: "Events", url: "/admin/events", icon: Calendar },
+  { title: "Court Calendar", url: "/admin/courts", icon: MapPin },
   { title: "Community Hub", url: "/admin/community", icon: MessageSquare },
 ];
 
 const coachItems = [
   { title: "Dashboard", url: "/coach", icon: LayoutDashboard },
+  { title: "My Teams", url: "/coach/teams", icon: Trophy },
+  { title: "Calendar", url: "/coach/calendar", icon: CalendarDays },
   { title: "Events", url: "/coach/events", icon: Calendar },
+  { title: "Court Calendar", url: "/coach/courts", icon: MapPin },
   { title: "Attendance", url: "/coach/attendance", icon: ClipboardCheck },
   { title: "Announcements", url: "/coach/announcements", icon: Megaphone },
   { title: "Community Hub", url: "/coach/community", icon: MessageSquare },
@@ -31,6 +35,7 @@ const coachItems = [
 
 const parentItems = [
   { title: "Dashboard", url: "/parent", icon: LayoutDashboard },
+  { title: "Calendar", url: "/parent/calendar", icon: CalendarDays },
   { title: "Child Schedule", url: "/parent/schedule", icon: Calendar },
   { title: "Registration", url: "/parent/registration", icon: FileText },
   { title: "Payments", url: "/parent/payments", icon: CreditCard },
@@ -40,6 +45,9 @@ const parentItems = [
 const playerItems = [
   { title: "Dashboard", url: "/player", icon: LayoutDashboard },
   { title: "My Schedule", url: "/player/schedule", icon: Calendar },
+  { title: "My Calendar", url: "/player/calendar", icon: CalendarDays },
+  { title: "Court Calendar", url: "/player/courts", icon: MapPin },
+  { title: "Payments", url: "/player/payments", icon: CreditCard },
   { title: "Community Hub", url: "/player/community", icon: MessageSquare },
 ];
 

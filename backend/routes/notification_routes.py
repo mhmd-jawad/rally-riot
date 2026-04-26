@@ -54,3 +54,11 @@ def mark_all_read():
 def send_reminders():
     count = ReminderService.send_upcoming_reminders(hours_ahead=24)
     return api_response.success({"events_notified": count}, f"Reminders sent for {count} upcoming event(s).")
+
+
+@notification_bp.route("/send-payment-reminders", methods=["POST"])
+@authenticate
+@authorize("admin")
+def send_payment_reminders():
+    count = ReminderService.send_payment_reminders()
+    return api_response.success({"invoices_notified": count}, f"Payment reminders sent for {count} unpaid invoice(s).")

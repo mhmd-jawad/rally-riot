@@ -11,6 +11,7 @@ class User(db.Model):
     password_hash = db.Column(db.String, nullable=False)
     role = db.Column(db.String, nullable=False)  # admin, coach, player, parent
     is_active = db.Column(db.Boolean, default=True)
+    wallet_balance = db.Column(db.Float, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -25,6 +26,7 @@ class User(db.Model):
             "email": self.email,
             "role": self.role,
             "is_active": self.is_active,
+            "wallet_balance": round(float(self.wallet_balance or 0), 2),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

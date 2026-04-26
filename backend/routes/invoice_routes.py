@@ -4,7 +4,7 @@ from flask import Blueprint, g, request
 
 import api_response
 from auth import authenticate, authorize
-from models import Invoice, Discount, InstallmentPlan, InstallmentPayment, RegistrationForm
+from models import Invoice, Discount, InstallmentPlan, InstallmentPayment, RegistrationForm, User
 from extensions import db
 
 invoice_bp = Blueprint("invoices", __name__)
@@ -12,11 +12,14 @@ invoice_bp = Blueprint("invoices", __name__)
 
 @invoice_bp.route("/", methods=["GET"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def list_invoices():
-    """Get invoices. Parents see their own; admins see all."""
-    if g.user["role"] == "admin":
+    """Get invoices. Parents see their own; players see their own; admins see all."""
+    role = g.user["role"]
+    if role == "admin":
         invoices = Invoice.query.order_by(Invoice.created_at.desc()).all()
+    elif role == "player":
+        invoices = Invoice.query.filter_by(player_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
     else:
         invoices = Invoice.query.filter_by(parent_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
 
@@ -44,13 +47,16 @@ def list_invoices():
 
 @invoice_bp.route("/<int:invoice_id>", methods=["GET"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def get_invoice(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
         return api_response.not_found("Invoice not found.")
 
-    if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
+    role = g.user["role"]
+    if role == "parent" and inv.parent_user_id != g.user["id"]:
+        return api_response.forbidden("Access denied.")
+    if role == "player" and inv.player_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
 
     return api_response.success(inv.to_dict(include_relations=True))
@@ -58,14 +64,35 @@ def get_invoice(invoice_id):
 
 @invoice_bp.route("/<int:invoice_id>/pay", methods=["PATCH"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def mark_paid(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
         return api_response.not_found("Invoice not found.")
 
-    if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
+    role = g.user["role"]
+    if role == "parent" and inv.parent_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
+    if role == "player" and inv.player_user_id != g.user["id"]:
+        return api_response.forbidden("Access denied.")
+
+    if inv.status == "paid":
+        return api_response.conflict("Invoice is already paid.")
+
+    outstanding = round(float(inv.amount) - float(inv.amount_paid), 2)
+
+    # Deduct from payer's wallet (admin bypasses the wallet check)
+    if role != "admin":
+        payer = User.query.get(g.user["id"])
+        if not payer:
+            return api_response.not_found("Payer not found.")
+        balance = round(float(payer.wallet_balance or 0), 2)
+        if balance < outstanding:
+            return api_response.bad_request(
+                f"Insufficient wallet balance. You have ${balance:.2f} but need ${outstanding:.2f}. "
+                "Please ask an admin to top up your wallet."
+            )
+        payer.wallet_balance = round(balance - outstanding, 2)
 
     inv.amount_paid = inv.amount
     inv.status = "paid"
@@ -154,7 +181,7 @@ def get_installments(invoice_id):
 
 @invoice_bp.route("/installments/<int:payment_id>/pay", methods=["PATCH"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def pay_installment(payment_id):
     payment = InstallmentPayment.query.get(payment_id)
     if not payment:
@@ -162,17 +189,35 @@ def pay_installment(payment_id):
 
     plan = InstallmentPlan.query.get(payment.plan_id)
     inv = Invoice.query.get(plan.invoice_id)
-    if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
+
+    role = g.user["role"]
+    if role == "parent" and inv.parent_user_id != g.user["id"]:
+        return api_response.forbidden("Access denied.")
+    if role == "player" and inv.player_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
 
     if payment.status == "paid":
         return api_response.conflict("This installment is already paid.")
 
+    installment_amount = round(float(payment.amount), 2)
+
+    # Deduct from payer's wallet (admin bypasses)
+    if role != "admin":
+        payer = User.query.get(g.user["id"])
+        if not payer:
+            return api_response.not_found("Payer not found.")
+        balance = round(float(payer.wallet_balance or 0), 2)
+        if balance < installment_amount:
+            return api_response.bad_request(
+                f"Insufficient wallet balance. You have ${balance:.2f} but need ${installment_amount:.2f}. "
+                "Please ask an admin to top up your wallet."
+            )
+        payer.wallet_balance = round(balance - installment_amount, 2)
+
     payment.status = "paid"
     payment.paid_at = datetime.utcnow()
 
-    # Update invoice amount_paid
-    inv.amount_paid = round(inv.amount_paid + payment.amount, 2)
+    inv.amount_paid = round(float(inv.amount_paid) + installment_amount, 2)
     if inv.amount_paid >= inv.amount:
         inv.status = "paid"
 

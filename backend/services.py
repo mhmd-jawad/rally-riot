@@ -261,6 +261,54 @@ class ReminderService:
 
         return notified_count
 
+    @staticmethod
+    def send_payment_reminders():
+        """
+        Notify parents (and players) who have unpaid or overdue invoices.
+        Skips invoices that already received a payment reminder in the last 24 hours.
+        """
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        unpaid = Invoice.query.filter(Invoice.status != "paid").all()
+
+        notified_count = 0
+        for invoice in unpaid:
+            already_sent = Notification.query.filter(
+                Notification.type == "payment_reminder",
+                Notification.title.like(f"%#{invoice.id}%"),
+                Notification.created_at >= now - timedelta(hours=24),
+            ).first()
+            if already_sent:
+                continue
+
+            outstanding = invoice.amount - invoice.amount_paid
+            overdue = invoice.due_date and datetime.strptime(invoice.due_date, "%Y-%m-%d").date() < now.date()
+            prefix = "OVERDUE" if overdue else "Payment Reminder"
+            due_str = f" (due {invoice.due_date})" if invoice.due_date else ""
+            title = f"[Invoice #{invoice.id}] {prefix}"
+            message = (
+                f"Invoice #{invoice.id} has an outstanding balance of ${outstanding:.2f}{due_str}. "
+                "Please log in to complete your payment."
+            )
+
+            recipient_ids = []
+            if invoice.parent_user_id:
+                recipient_ids.append(invoice.parent_user_id)
+            if invoice.player_user_id and invoice.player_user_id not in recipient_ids:
+                recipient_ids.append(invoice.player_user_id)
+
+            if recipient_ids:
+                NotificationService.notify_many(
+                    recipient_ids,
+                    "payment_reminder",
+                    message,
+                    title=title,
+                    send_email=True,
+                )
+                db.session.commit()
+                notified_count += 1
+
+        return notified_count
+
 
 class InvoiceService:
     """Generate invoices from registrations, applying discounts and installment plans."""

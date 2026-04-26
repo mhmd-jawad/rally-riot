@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, CreditCard, ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Clock } from "lucide-react";
+import { DollarSign, CreditCard, ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Clock, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, isPast, parseISO } from "date-fns";
 import { useState } from "react";
@@ -147,6 +147,12 @@ export default function ParentPayments() {
     queryFn: async () => (await api.invoices.list()).data,
   });
 
+  const { data: walletData } = useQuery({
+    queryKey: ["my-wallet"],
+    queryFn: async () => (await api.users.myWallet()).data,
+  });
+  const walletBalance = walletData?.wallet_balance ?? 0;
+
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
   const invoices = data?.invoices || [];
@@ -161,6 +167,21 @@ export default function ParentPayments() {
         <h1 className="text-2xl font-bold">Payments</h1>
         <p className="text-muted-foreground">View and pay invoices</p>
       </div>
+
+      <Card className={walletBalance === 0 ? "border-red-300 bg-red-50/30" : "border-green-300 bg-green-50/30"}>
+        <CardContent className="pt-4 flex items-center gap-3">
+          <Wallet className={`w-8 h-8 ${walletBalance === 0 ? "text-red-500" : "text-green-600"}`} />
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Wallet Balance</p>
+            <p className={`text-2xl font-bold ${walletBalance === 0 ? "text-red-600" : "text-green-600"}`}>
+              ${walletBalance.toFixed(2)}
+            </p>
+            {walletBalance === 0 && (
+              <p className="text-xs text-red-500 mt-0.5">No funds — ask an admin to top up your wallet before paying</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {invoices.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

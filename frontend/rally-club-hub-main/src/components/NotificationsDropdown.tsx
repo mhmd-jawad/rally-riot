@@ -1,4 +1,4 @@
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, CalendarClock, CreditCard, FileText, Megaphone, AlertTriangle, Clock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -6,6 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatDistanceToNow } from "date-fns";
+
+const notifIcon: Record<string, { icon: React.ElementType; color: string }> = {
+  schedule_change: { icon: CalendarClock, color: "text-orange-500" },
+  event_reminder:  { icon: Clock,         color: "text-blue-500"   },
+  payment_reminder:{ icon: CreditCard,    color: "text-red-500"    },
+  invoice:         { icon: CreditCard,    color: "text-green-600"  },
+  registration:    { icon: FileText,      color: "text-purple-500" },
+  announcement:    { icon: Megaphone,     color: "text-indigo-500" },
+  warning:         { icon: AlertTriangle, color: "text-yellow-500" },
+};
+
+function NotifIcon({ type }: { type: string }) {
+  const entry = notifIcon[type] || { icon: Bell, color: "text-muted-foreground" };
+  const Icon = entry.icon;
+  return <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${entry.color}`} />;
+}
 
 export function NotificationsDropdown() {
   const { user } = useAuth();
@@ -74,14 +90,19 @@ export function NotificationsDropdown() {
                 }`}
                 onClick={() => !n.is_read && markRead.mutate(n.id)}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium">{n.title || n.type}</p>
-                  {!n.is_read && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />}
+                <div className="flex items-start gap-2">
+                  <NotifIcon type={n.type} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium leading-snug">{n.title || n.type}</p>
+                      {!n.is_read && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1" />}
+                    </div>
+                    {n.message && <p className="text-xs text-muted-foreground mt-1">{n.message}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatDistanceToNow(new Date(n.created_at + "Z"), { addSuffix: true })}
+                    </p>
+                  </div>
                 </div>
-                {n.message && <p className="text-xs text-muted-foreground mt-1">{n.message}</p>}
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatDistanceToNow(new Date(n.created_at + "Z"), { addSuffix: true })}
-                </p>
               </div>
             ))
           )}

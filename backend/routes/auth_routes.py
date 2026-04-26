@@ -1,9 +1,10 @@
-"""Auth routes: login, me, logout."""
+"""Auth routes: login, me, logout, register."""
 from flask import Blueprint, request, g
 
 import api_response
-from auth import authenticate, check_password, generate_token
+from auth import authenticate, check_password, generate_token, hash_password
 from models import User
+from extensions import db
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -69,6 +70,43 @@ def logout():
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    return api_response.forbidden(
-        "Public sign-up is disabled. Ask a club admin to create your account."
+    data = request.get_json(silent=True) or {}
+
+    errors = []
+    if not data.get("full_name", "").strip():
+        errors.append({"field": "full_name", "message": "Full name is required."})
+    if not data.get("email", "").strip():
+        errors.append({"field": "email", "message": "Email is required."})
+    if not data.get("password") or len(data.get("password", "")) < 6:
+        errors.append({"field": "password", "message": "Password must be at least 6 characters."})
+    role = data.get("role", "")
+    if role not in ("player", "parent"):
+        errors.append({"field": "role", "message": "Role must be player or parent."})
+    if errors:
+        return api_response.bad_request("Validation failed.", errors)
+
+    if User.query.filter_by(email=data["email"].strip()).first():
+        return api_response.conflict("An account with this email already exists.")
+
+    user = User(
+        full_name=data["full_name"].strip(),
+        email=data["email"].strip(),
+        password_hash=hash_password(data["password"]),
+        role=role,
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    token = generate_token(user)
+    return api_response.created(
+        {
+            "token": token,
+            "user": {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+            },
+        },
+        "Account created successfully.",
     )

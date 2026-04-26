@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Users, UserPlus, Star } from "lucide-react";
+import { Plus, Users, UserPlus, Star, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AdminTeams() {
@@ -69,8 +70,9 @@ export default function AdminTeams() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const coaches = users.filter((u: any) => u.role === "coach");
-  const players = users.filter((u: any) => u.role === "player");
+  const realUsers = (users as any[]).filter((u: any) => !u.email.endsWith(".internal"));
+  const coaches = realUsers.filter((u: any) => u.role === "coach");
+  const players = realUsers.filter((u: any) => u.role === "player");
 
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
@@ -106,9 +108,19 @@ export default function AdminTeams() {
         </Dialog>
       </div>
 
+      {/* Alert when any team is missing a coach or players */}
+      {(teams as any[]).some((t: any) => !t.coaches?.length || !t.players?.length) && coaches.length > 0 && (
+        <Alert className="border-yellow-300 bg-yellow-50 text-yellow-900">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription>
+            Some teams have no coach or no players assigned. Use the <strong>Assign</strong> buttons below to complete the setup.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid md:grid-cols-2 gap-6">
         {teams.map((team: any) => (
-          <Card key={team.id}>
+          <Card key={team.id} className={(!team.coaches?.length || !team.players?.length) ? "border-yellow-300" : ""}>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>{team.name}</span>
@@ -140,18 +152,32 @@ export default function AdminTeams() {
                 </div>
                 {team.coaches?.length > 0 ? (
                   <div className="space-y-1">{team.coaches.map((c: any) => <p key={c.id} className="text-sm text-muted-foreground">{c.full_name}</p>)}</div>
-                ) : <p className="text-sm text-muted-foreground italic">No coaches assigned</p>}
+                ) : (
+                  <button
+                    className="text-sm text-yellow-700 italic flex items-center gap-1 hover:underline"
+                    onClick={() => { setAssignOpen({ teamId: team.id, type: "coach" }); setSelectedUserId(""); }}
+                  >
+                    <AlertTriangle className="w-3 h-3" /> No coach assigned — click to assign
+                  </button>
+                )}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium">Players ({team.players?.length || 0})</h4>
+                  <h4 className="text-sm font-medium">Players ({team.players?.filter((p: any) => !p.email?.endsWith(".internal")).length || 0})</h4>
                   <Button size="sm" variant="outline" onClick={() => { setAssignOpen({ teamId: team.id, type: "player" }); setSelectedUserId(""); }}>
                     <Users className="w-3 h-3 mr-1" /> Assign
                   </Button>
                 </div>
-                {team.players?.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">{team.players.map((p: any) => <Badge key={p.id} variant="secondary">{p.full_name}</Badge>)}</div>
-                ) : <p className="text-sm text-muted-foreground italic">No players assigned</p>}
+                {team.players?.filter((p: any) => !p.email?.endsWith(".internal")).length > 0 ? (
+                  <div className="flex flex-wrap gap-1">{team.players.filter((p: any) => !p.email?.endsWith(".internal")).map((p: any) => <Badge key={p.id} variant="secondary">{p.full_name}</Badge>)}</div>
+                ) : (
+                  <button
+                    className="text-sm text-yellow-700 italic flex items-center gap-1 hover:underline"
+                    onClick={() => { setAssignOpen({ teamId: team.id, type: "player" }); setSelectedUserId(""); }}
+                  >
+                    <AlertTriangle className="w-3 h-3" /> No players assigned — click to assign
+                  </button>
+                )}
               </div>
             </CardContent>
           </Card>

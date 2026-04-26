@@ -1,10 +1,14 @@
 import { parseUTC } from "@/lib/utils";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DollarSign, TrendingUp, AlertCircle, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DollarSign, TrendingUp, AlertCircle, AlertTriangle, Bell, Wallet, Plus } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { format, isPast, parseISO } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +16,26 @@ import { useToast } from "@/hooks/use-toast";
 export default function AdminFinance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [walletUserId, setWalletUserId] = useState("");
+  const [walletAmount, setWalletAmount] = useState("");
+
+  const { data: usersData = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.users.list()).data || [],
+  });
+  const walletUsers = (usersData as any[]).filter(
+    (u: any) => (u.role === "player" || u.role === "parent") && !u.email.endsWith(".internal")
+  );
+
+  const topUpMutation = useMutation({
+    mutationFn: () => api.users.topUpWallet(Number(walletUserId), Number(walletAmount)),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast({ title: "Wallet topped up", description: res.message });
+      setWalletAmount("");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["invoices"],
@@ -24,6 +48,12 @@ export default function AdminFinance() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       toast({ title: "Invoice marked as paid" });
     },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const paymentReminderMutation = useMutation({
+    mutationFn: () => api.notifications.sendPaymentReminders(),
+    onSuccess: (res: any) => toast({ title: "Payment reminders sent", description: res.message }),
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -49,9 +79,19 @@ export default function AdminFinance() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold">Finance</h1>
-        <p className="text-muted-foreground">Invoice overview and payment tracking</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Finance</h1>
+          <p className="text-muted-foreground">Invoice overview and payment tracking</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => paymentReminderMutation.mutate()}
+          disabled={paymentReminderMutation.isPending}
+        >
+          <Bell className="w-4 h-4 mr-2" />
+          {paymentReminderMutation.isPending ? "Sending..." : "Send Payment Reminders"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -70,6 +110,79 @@ export default function AdminFinance() {
           </Card>
         )}
       </div>
+
+      {/* Wallet management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="w-5 h-5" /> Wallet Management
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-[1fr_1fr_auto_auto] gap-3 items-end">
+            <div>
+              <Label>User</Label>
+              <Select value={walletUserId} onValueChange={setWalletUserId}>
+                <SelectTrigger><SelectValue placeholder="Select player or parent" /></SelectTrigger>
+                <SelectContent>
+                  {walletUsers.map((u: any) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.full_name} ({u.role}) — ${(u.wallet_balance ?? 0).toFixed(2)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Amount to Add ($)</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="e.g. 200.00"
+                value={walletAmount}
+                onChange={e => setWalletAmount(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={() => topUpMutation.mutate()}
+              disabled={!walletUserId || !walletAmount || Number(walletAmount) <= 0 || topUpMutation.isPending}
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add Funds
+            </Button>
+          </div>
+
+          {/* Wallet balances table */}
+          {walletUsers.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-4">Name</th>
+                    <th className="pb-2 pr-4">Role</th>
+                    <th className="pb-2">Wallet Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {walletUsers.map((u: any) => (
+                    <tr key={u.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{u.full_name}</td>
+                      <td className="py-2 pr-4">
+                        <Badge variant="secondary" className={u.role === "parent" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                          {u.role}
+                        </Badge>
+                      </td>
+                      <td className={`py-2 font-semibold ${(u.wallet_balance ?? 0) === 0 ? "text-red-500" : "text-green-600"}`}>
+                        ${(u.wallet_balance ?? 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle>All Invoices</CardTitle></CardHeader>

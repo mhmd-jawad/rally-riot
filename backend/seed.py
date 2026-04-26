@@ -1,4 +1,21 @@
-"""Seed the database with demo data — professor demo build."""
+"""Seed the database with demo data — professor demo build.
+
+Demo narrative
+--------------
+1. Log in as Admin (admin@rallyriot.com / Password1!)
+2. Show the Admin dashboard — teams, events, registrations, finance all exist as
+   background data to make the club feel real.
+3. LIVE: Admin creates a new Coach account → assigns them to Thunder U16.
+4. LIVE: Admin creates a new Player account → assigns them to Thunder U16.
+5. Log in as the newly created Coach → see their team, create an event, mark attendance.
+6. Log in as the newly created Player → see their schedule, RSVP.
+7. Switch to Parent accounts (ahmad / fatima / nour) to show payments, child schedule.
+
+Coaches / players in the sample data are NOT pre-created as login accounts.
+All historical events, attendance records, and community posts are authored by the
+admin user so the data looks real without requiring separate coach/player logins to
+already exist.
+"""
 from extensions import db
 from models import (
     User, Team, TeamCoach, TeamPlayer, ParentChildLink,
@@ -15,18 +32,13 @@ from datetime import datetime, timedelta
 
 PASSWORD = "Password1!"
 
+# Only accounts that must survive an ensure_demo_accounts() repair pass.
+# Coaches and players are NOT listed here — they are created live during the demo.
 DEMO_USERS = [
-    ("Mohammad Al-Admin", "admin@rallyriot.com", "admin"),
-    ("Ali Hassan", "ali@rallyriot.com", "coach"),
-    ("Haydar Karimi", "haydar@rallyriot.com", "coach"),
-    ("Omar Al-Rashid", "omar@rallyriot.com", "player"),
-    ("Sara Khalil", "sara@rallyriot.com", "player"),
-    ("Ziad Nasser", "ziad@rallyriot.com", "player"),
-    ("Lena Farouk", "lena@rallyriot.com", "player"),
-    ("Karim Mansour", "karim@rallyriot.com", "player"),
-    ("Ahmad Al-Rashid", "ahmad@rallyriot.com", "parent"),
-    ("Fatima Khalil", "fatima@rallyriot.com", "parent"),
-    ("Nour Mansour", "nour@rallyriot.com", "parent"),
+    ("Mohammad Al-Admin", "admin@rallyriot.com",   "admin"),
+    ("Ahmad Al-Rashid",   "ahmad@rallyriot.com",   "parent"),
+    ("Fatima Khalil",     "fatima@rallyriot.com",  "parent"),
+    ("Nour Mansour",      "nour@rallyriot.com",    "parent"),
 ]
 
 
@@ -76,89 +88,72 @@ def seed():
 
     # ══════════════════════════════════════════════════════════════
     # USERS
+    # Only admin + parents are pre-seeded.
+    # Coaches and players will be created LIVE during the demo.
     # ══════════════════════════════════════════════════════════════
 
-    # Admin
     admin = User(full_name="Mohammad Al-Admin", email="admin@rallyriot.com",
                  password_hash=hash_password(PASSWORD), role="admin")
 
-    # Coaches
-    coach_ali = User(full_name="Ali Hassan", email="ali@rallyriot.com",
-                     password_hash=hash_password(PASSWORD), role="coach")
-    coach_haydar = User(full_name="Haydar Karimi", email="haydar@rallyriot.com",
-                        password_hash=hash_password(PASSWORD), role="coach")
+    parent_ahmad  = User(full_name="Ahmad Al-Rashid",  email="ahmad@rallyriot.com",
+                         password_hash=hash_password(PASSWORD), role="parent", wallet_balance=500.00)
+    parent_fatima = User(full_name="Fatima Khalil",    email="fatima@rallyriot.com",
+                         password_hash=hash_password(PASSWORD), role="parent", wallet_balance=300.00)
+    parent_nour   = User(full_name="Nour Mansour",     email="nour@rallyriot.com",
+                         password_hash=hash_password(PASSWORD), role="parent", wallet_balance=50.00)
 
-    # Players
-    player_omar = User(full_name="Omar Al-Rashid", email="omar@rallyriot.com",
-                       password_hash=hash_password(PASSWORD), role="player")
-    player_sara = User(full_name="Sara Khalil", email="sara@rallyriot.com",
-                       password_hash=hash_password(PASSWORD), role="player")
-    player_ziad = User(full_name="Ziad Nasser", email="ziad@rallyriot.com",
-                       password_hash=hash_password(PASSWORD), role="player")
-    player_lena = User(full_name="Lena Farouk", email="lena@rallyriot.com",
-                       password_hash=hash_password(PASSWORD), role="player")
-    player_karim = User(full_name="Karim Mansour", email="karim@rallyriot.com",
-                        password_hash=hash_password(PASSWORD), role="player")
-
-    # Parents
-    parent_ahmad = User(full_name="Ahmad Al-Rashid", email="ahmad@rallyriot.com",
-                        password_hash=hash_password(PASSWORD), role="parent")
-    parent_fatima = User(full_name="Fatima Khalil", email="fatima@rallyriot.com",
-                         password_hash=hash_password(PASSWORD), role="parent")
-    parent_nour = User(full_name="Nour Mansour", email="nour@rallyriot.com",
-                       password_hash=hash_password(PASSWORD), role="parent")
-
-    db.session.add_all([
-        admin,
-        coach_ali, coach_haydar,
-        player_omar, player_sara, player_ziad, player_lena, player_karim,
-        parent_ahmad, parent_fatima, parent_nour,
-    ])
+    db.session.add_all([admin, parent_ahmad, parent_fatima, parent_nour])
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # PARENT-CHILD LINKS
-    # Demonstrates: parent can view child schedule, RSVP, pay invoices
+    # TEAMS  (exist before any coach/player is assigned)
     # ══════════════════════════════════════════════════════════════
-    db.session.add(ParentChildLink(parent_user_id=parent_ahmad.id, child_user_id=player_omar.id))
-    db.session.add(ParentChildLink(parent_user_id=parent_fatima.id, child_user_id=player_sara.id))
-    db.session.add(ParentChildLink(parent_user_id=parent_nour.id,   child_user_id=player_karim.id))
-    # Ahmad also linked to Sara to demo one parent with two children
-    db.session.add(ParentChildLink(parent_user_id=parent_ahmad.id, child_user_id=player_ziad.id))
-    db.session.flush()
-
-    # ══════════════════════════════════════════════════════════════
-    # TEAMS
-    # ══════════════════════════════════════════════════════════════
-    team_thunder = Team(name="Thunder U16", age_group="U16",
-                        skill_level="Advanced", priority_level=5)
-    team_lightning = Team(name="Lightning U14", age_group="U14",
-                          skill_level="Intermediate", priority_level=4)
-    team_storm = Team(name="Storm Beginners", age_group="U12",
-                      skill_level="Beginner", priority_level=2)
+    team_thunder   = Team(name="Thunder U16",      age_group="U16", skill_level="Advanced",     priority_level=5)
+    team_lightning = Team(name="Lightning U14",    age_group="U14", skill_level="Intermediate", priority_level=4)
+    team_storm     = Team(name="Storm Beginners",  age_group="U12", skill_level="Beginner",      priority_level=2)
     db.session.add_all([team_thunder, team_lightning, team_storm])
     db.session.flush()
 
-    # Coach assignments
-    db.session.add(TeamCoach(team_id=team_thunder.id,   coach_user_id=coach_ali.id))
-    db.session.add(TeamCoach(team_id=team_lightning.id, coach_user_id=coach_haydar.id))
-    db.session.add(TeamCoach(team_id=team_storm.id,     coach_user_id=coach_ali.id))
+    # ══════════════════════════════════════════════════════════════
+    # PLACEHOLDER PLAYERS for historical data
+    # These are internal DB records only — no login credentials.
+    # The admin will create real loginable players live during the demo.
+    # ══════════════════════════════════════════════════════════════
+    _ph = hash_password("disabled-no-login-$$")  # unusable password
+    ph_omar  = User(full_name="Omar Al-Rashid (sample)",  email="omar.sample@rallyriot.internal",
+                    password_hash=_ph, role="player", is_active=False)
+    ph_sara  = User(full_name="Sara Khalil (sample)",     email="sara.sample@rallyriot.internal",
+                    password_hash=_ph, role="player", is_active=False)
+    ph_ziad  = User(full_name="Ziad Nasser (sample)",     email="ziad.sample@rallyriot.internal",
+                    password_hash=_ph, role="player", is_active=False)
+    ph_lena  = User(full_name="Lena Farouk (sample)",     email="lena.sample@rallyriot.internal",
+                    password_hash=_ph, role="player", is_active=False)
+    ph_karim = User(full_name="Karim Mansour (sample)",   email="karim.sample@rallyriot.internal",
+                    password_hash=_ph, role="player", is_active=False)
+    db.session.add_all([ph_omar, ph_sara, ph_ziad, ph_lena, ph_karim])
+    db.session.flush()
 
-    # Player assignments
-    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=player_omar.id))
-    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=player_sara.id))
-    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=player_ziad.id))
-    db.session.add(TeamPlayer(team_id=team_lightning.id, player_user_id=player_lena.id))
-    db.session.add(TeamPlayer(team_id=team_lightning.id, player_user_id=player_karim.id))
+    # Parent-child links for sample players (used for invoices / registration history)
+    db.session.add(ParentChildLink(parent_user_id=parent_ahmad.id,  child_user_id=ph_omar.id))
+    db.session.add(ParentChildLink(parent_user_id=parent_fatima.id, child_user_id=ph_sara.id))
+    db.session.add(ParentChildLink(parent_user_id=parent_nour.id,   child_user_id=ph_karim.id))
+    db.session.add(ParentChildLink(parent_user_id=parent_ahmad.id,  child_user_id=ph_ziad.id))
+    db.session.flush()
+
+    # Team assignments for sample players
+    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=ph_omar.id))
+    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=ph_sara.id))
+    db.session.add(TeamPlayer(team_id=team_thunder.id,   player_user_id=ph_ziad.id))
+    db.session.add(TeamPlayer(team_id=team_lightning.id, player_user_id=ph_lena.id))
+    db.session.add(TeamPlayer(team_id=team_lightning.id, player_user_id=ph_karim.id))
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # EVENTS — past + upcoming to demo all states
+    # EVENTS — all authored by admin so no coach login is required
     # ══════════════════════════════════════════════════════════════
 
-    # Past events (for attendance history)
     ev_past1 = Event(
-        team_id=team_thunder.id, created_by_user_id=coach_ali.id,
+        team_id=team_thunder.id, created_by_user_id=admin.id,
         event_type="practice", title="Pre-Season Warm-Up",
         description="First practice of the season — fitness drills and passing.",
         court="Court A",
@@ -166,17 +161,15 @@ def seed():
         end_time=now   - timedelta(days=10, hours=-11),
     )
     ev_past2 = Event(
-        team_id=team_thunder.id, created_by_user_id=coach_ali.id,
+        team_id=team_thunder.id, created_by_user_id=admin.id,
         event_type="match", title="Friendly vs Riverside FC",
         description="Pre-season friendly match.",
         court="Court B",
         start_time=now - timedelta(days=5, hours=-14),
         end_time=now   - timedelta(days=5, hours=-16),
     )
-
-    # Upcoming events
     ev_practice1 = Event(
-        team_id=team_thunder.id, created_by_user_id=coach_ali.id,
+        team_id=team_thunder.id, created_by_user_id=admin.id,
         event_type="practice", title="Tuesday Morning Practice",
         description="Serve and receive drills. Bring water and knee pads.",
         court="Court A",
@@ -184,7 +177,7 @@ def seed():
         end_time=now   + timedelta(days=1, hours=10),
     )
     ev_match1 = Event(
-        team_id=team_thunder.id, created_by_user_id=coach_ali.id,
+        team_id=team_thunder.id, created_by_user_id=admin.id,
         event_type="match", title="League Match vs Eagles",
         description="Official league game. Arrive 30 min early for warm-up.",
         court="Court B",
@@ -192,7 +185,7 @@ def seed():
         end_time=now   + timedelta(days=3, hours=16),
     )
     ev_tryout = Event(
-        team_id=team_lightning.id, created_by_user_id=coach_haydar.id,
+        team_id=team_lightning.id, created_by_user_id=admin.id,
         event_type="tryout", title="Lightning U14 Open Tryouts",
         description="Open tryout for new players. All skill levels welcome.",
         court="Court C",
@@ -200,7 +193,7 @@ def seed():
         end_time=now   + timedelta(days=5, hours=11),
     )
     ev_practice2 = Event(
-        team_id=team_lightning.id, created_by_user_id=coach_haydar.id,
+        team_id=team_lightning.id, created_by_user_id=admin.id,
         event_type="practice", title="Thursday Technique Session",
         description="Focus on blocking and spiking.",
         court="Court A",
@@ -208,7 +201,7 @@ def seed():
         end_time=now   + timedelta(days=6, hours=18),
     )
     ev_tournament = Event(
-        team_id=team_thunder.id, created_by_user_id=coach_ali.id,
+        team_id=team_thunder.id, created_by_user_id=admin.id,
         event_type="tournament", title="City Cup Tournament",
         description="Annual city-wide volleyball tournament. Pool play starts at 9am.",
         court="Main Hall",
@@ -248,7 +241,6 @@ def seed():
     db.session.add_all([form_thunder, form_lightning, form_tryout])
     db.session.flush()
 
-    # Discount on Thunder form to demo discount feature
     db.session.add(Discount(
         form_id=form_thunder.id, label="Early Bird 10% Off",
         discount_type="percentage", value=10.0,
@@ -256,37 +248,36 @@ def seed():
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # REGISTRATIONS & INVOICES
-    # Shows: approved (paid), approved (installments), pending, rejected
+    # REGISTRATIONS & INVOICES  (linked to sample placeholder players)
     # ══════════════════════════════════════════════════════════════
 
-    # Omar (Thunder) — approved, paid in full
+    # Omar — approved, paid in full
     reg_omar = Registration(
-        form_id=form_thunder.id, player_user_id=player_omar.id,
+        form_id=form_thunder.id, player_user_id=ph_omar.id,
         parent_user_id=parent_ahmad.id, status="approved",
     )
     db.session.add(reg_omar)
     db.session.flush()
     inv_omar = Invoice(
         registration_id=reg_omar.id,
-        parent_user_id=parent_ahmad.id, player_user_id=player_omar.id,
-        amount=180.00, amount_paid=180.00,   # 200 - 10% discount = 180
+        parent_user_id=parent_ahmad.id, player_user_id=ph_omar.id,
+        amount=180.00, amount_paid=180.00,
         status="paid",
         due_date=(now + timedelta(days=14)).date().isoformat(),
     )
     db.session.add(inv_omar)
     db.session.flush()
 
-    # Sara (Thunder) — approved, installment plan (2 payments, 1 paid 1 pending)
+    # Sara — approved, installment plan (1 paid, 1 pending)
     reg_sara = Registration(
-        form_id=form_thunder.id, player_user_id=player_sara.id,
+        form_id=form_thunder.id, player_user_id=ph_sara.id,
         parent_user_id=parent_fatima.id, status="approved",
     )
     db.session.add(reg_sara)
     db.session.flush()
     inv_sara = Invoice(
         registration_id=reg_sara.id,
-        parent_user_id=parent_fatima.id, player_user_id=player_sara.id,
+        parent_user_id=parent_fatima.id, player_user_id=ph_sara.id,
         amount=180.00, amount_paid=90.00,
         status="unpaid",
         due_date=(now + timedelta(days=7)).date().isoformat(),
@@ -308,16 +299,16 @@ def seed():
     ))
     db.session.flush()
 
-    # Ziad (Thunder) — pending approval (shows admin approve/reject workflow)
+    # Ziad — pending approval
     reg_ziad = Registration(
-        form_id=form_thunder.id, player_user_id=player_ziad.id,
+        form_id=form_thunder.id, player_user_id=ph_ziad.id,
         parent_user_id=parent_ahmad.id, status="pending",
     )
     db.session.add(reg_ziad)
     db.session.flush()
     inv_ziad = Invoice(
         registration_id=reg_ziad.id,
-        parent_user_id=parent_ahmad.id, player_user_id=player_ziad.id,
+        parent_user_id=parent_ahmad.id, player_user_id=ph_ziad.id,
         amount=180.00, amount_paid=0.00,
         status="unpaid",
         due_date=(now + timedelta(days=14)).date().isoformat(),
@@ -325,84 +316,69 @@ def seed():
     db.session.add(inv_ziad)
     db.session.flush()
 
-    # Karim (Lightning) — approved, overdue invoice (for demo of overdue highlighting)
+    # Karim — approved, overdue invoice
     reg_karim = Registration(
-        form_id=form_lightning.id, player_user_id=player_karim.id,
+        form_id=form_lightning.id, player_user_id=ph_karim.id,
         parent_user_id=parent_nour.id, status="approved",
     )
     db.session.add(reg_karim)
     db.session.flush()
     inv_karim = Invoice(
         registration_id=reg_karim.id,
-        parent_user_id=parent_nour.id, player_user_id=player_karim.id,
+        parent_user_id=parent_nour.id, player_user_id=ph_karim.id,
         amount=150.00, amount_paid=0.00,
         status="unpaid",
-        due_date=(now - timedelta(days=5)).date().isoformat(),   # overdue!
+        due_date=(now - timedelta(days=5)).date().isoformat(),
     )
     db.session.add(inv_karim)
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # RSVPs
+    # RSVPs  (sample players on upcoming events)
     # ══════════════════════════════════════════════════════════════
-    # Upcoming practice — mixed RSVPs
-    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=player_omar.id,
-                        responded_by_user_id=player_omar.id, status="attending"))
-    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=player_sara.id,
+    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=ph_omar.id,
+                        responded_by_user_id=parent_ahmad.id, status="attending"))
+    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=ph_sara.id,
                         responded_by_user_id=parent_fatima.id, status="attending"))
-    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=player_ziad.id,
-                        responded_by_user_id=player_ziad.id, status="not_attending"))
-
-    # Upcoming match
-    db.session.add(RSVP(event_id=ev_match1.id, player_user_id=player_omar.id,
-                        responded_by_user_id=player_omar.id, status="attending"))
-    db.session.add(RSVP(event_id=ev_match1.id, player_user_id=player_sara.id,
-                        responded_by_user_id=player_sara.id, status="maybe"))
+    db.session.add(RSVP(event_id=ev_practice1.id, player_user_id=ph_ziad.id,
+                        responded_by_user_id=parent_ahmad.id, status="not_attending"))
+    db.session.add(RSVP(event_id=ev_match1.id, player_user_id=ph_omar.id,
+                        responded_by_user_id=parent_ahmad.id, status="attending"))
+    db.session.add(RSVP(event_id=ev_match1.id, player_user_id=ph_sara.id,
+                        responded_by_user_id=parent_fatima.id, status="maybe"))
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # ATTENDANCE (past events)
+    # ATTENDANCE  (past events — marked by admin)
     # ══════════════════════════════════════════════════════════════
-    db.session.add(AttendanceRecord(
-        event_id=ev_past1.id, player_user_id=player_omar.id,
-        marked_by_user_id=coach_ali.id, status="present",
-    ))
-    db.session.add(AttendanceRecord(
-        event_id=ev_past1.id, player_user_id=player_sara.id,
-        marked_by_user_id=coach_ali.id, status="present",
-    ))
-    db.session.add(AttendanceRecord(
-        event_id=ev_past1.id, player_user_id=player_ziad.id,
-        marked_by_user_id=coach_ali.id, status="absent",
-        absence_reason="Family trip",
-    ))
-    db.session.add(AttendanceRecord(
-        event_id=ev_past2.id, player_user_id=player_omar.id,
-        marked_by_user_id=coach_ali.id, status="present",
-    ))
-    db.session.add(AttendanceRecord(
-        event_id=ev_past2.id, player_user_id=player_sara.id,
-        marked_by_user_id=coach_ali.id, status="absent",
-        absence_reason="Sick",
-    ))
-    db.session.add(AttendanceRecord(
-        event_id=ev_past2.id, player_user_id=player_ziad.id,
-        marked_by_user_id=coach_ali.id, status="present",
-    ))
+    db.session.add(AttendanceRecord(event_id=ev_past1.id, player_user_id=ph_omar.id,
+                                    marked_by_user_id=admin.id, status="present"))
+    db.session.add(AttendanceRecord(event_id=ev_past1.id, player_user_id=ph_sara.id,
+                                    marked_by_user_id=admin.id, status="present"))
+    db.session.add(AttendanceRecord(event_id=ev_past1.id, player_user_id=ph_ziad.id,
+                                    marked_by_user_id=admin.id, status="absent",
+                                    absence_reason="Family trip"))
+    db.session.add(AttendanceRecord(event_id=ev_past2.id, player_user_id=ph_omar.id,
+                                    marked_by_user_id=admin.id, status="present"))
+    db.session.add(AttendanceRecord(event_id=ev_past2.id, player_user_id=ph_sara.id,
+                                    marked_by_user_id=admin.id, status="absent",
+                                    absence_reason="Sick"))
+    db.session.add(AttendanceRecord(event_id=ev_past2.id, player_user_id=ph_ziad.id,
+                                    marked_by_user_id=admin.id, status="present"))
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # ANNOUNCEMENTS
+    # ANNOUNCEMENTS  (authored by admin)
     # ══════════════════════════════════════════════════════════════
     ann1 = Announcement(
-        team_id=team_thunder.id, coach_user_id=coach_ali.id,
+        team_id=team_thunder.id, coach_user_id=admin.id,
         title="Welcome to Spring Season 2026!",
         message="Excited to kick off the new season with Thunder U16. "
                 "First practice is tomorrow at 8am on Court A. Come warmed up!",
         priority="high",
     )
     ann2 = Announcement(
-        team_id=team_thunder.id, coach_user_id=coach_ali.id,
+        team_id=team_thunder.id, coach_user_id=admin.id,
         title="League Match This Thursday — Important",
         message="Reminder: league match vs Eagles on Thursday at 2pm, Court B. "
                 "Please RSVP in the app so I can finalize the lineup. "
@@ -410,14 +386,14 @@ def seed():
         priority="high",
     )
     ann3 = Announcement(
-        team_id=team_thunder.id, coach_user_id=coach_ali.id,
+        team_id=team_thunder.id, coach_user_id=admin.id,
         title="Court Change for Friday Practice",
         message="Friday's practice has moved from Court A to Court C due to maintenance. "
                 "All other details remain the same.",
         priority="normal",
     )
     ann4 = Announcement(
-        team_id=team_lightning.id, coach_user_id=coach_haydar.id,
+        team_id=team_lightning.id, coach_user_id=admin.id,
         title="Tryouts Next Week — Spread the Word",
         message="Open tryouts for Lightning U14 are next week. "
                 "Encourage any interested players to register through the app.",
@@ -427,35 +403,15 @@ def seed():
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # NOTIFICATIONS
+    # NOTIFICATIONS  (for parent accounts)
     # ══════════════════════════════════════════════════════════════
-
-    # Player notifications
-    db.session.add(Notification(
-        user_id=player_omar.id, type="announcement", title="New Announcement from Coach Ali",
-        message="Welcome to Spring Season 2026! First practice is tomorrow at 8am.", is_read=False,
-    ))
-    db.session.add(Notification(
-        user_id=player_omar.id, type="schedule_change", title="Schedule Change",
-        message="Event 'Friday Practice' has been updated — court changed to Court C.", is_read=False,
-    ))
-    db.session.add(Notification(
-        user_id=player_sara.id, type="announcement", title="New Announcement from Coach Ali",
-        message="League Match This Thursday — jerseys are mandatory.", is_read=False,
-    ))
-    db.session.add(Notification(
-        user_id=player_ziad.id, type="announcement", title="New Announcement from Coach Ali",
-        message="Welcome to Spring Season 2026!", is_read=True,
-    ))
-
-    # Parent notifications
     db.session.add(Notification(
         user_id=parent_ahmad.id, type="registration", title="Registration Approved",
         message="Omar Al-Rashid's registration for Thunder U16 has been approved.", is_read=False,
     ))
     db.session.add(Notification(
         user_id=parent_ahmad.id, type="invoice", title="Invoice Paid",
-        message="Invoice #1 for Omar Al-Rashid — $180.00 has been marked as paid.", is_read=True,
+        message="Invoice for Omar Al-Rashid — $180.00 has been marked as paid.", is_read=True,
     ))
     db.session.add(Notification(
         user_id=parent_fatima.id, type="invoice", title="Installment Due Soon",
@@ -465,15 +421,15 @@ def seed():
         user_id=parent_nour.id, type="invoice", title="Invoice Overdue",
         message="Invoice for Karim Mansour ($150.00) is overdue. Please pay as soon as possible.", is_read=False,
     ))
+    db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
-    # COMMUNITY HUB
+    # COMMUNITY HUB  (admin posts stand-in for coaches/players)
     # ══════════════════════════════════════════════════════════════
 
-    # Pinned post from admin
     post_pinned = CommunityPost(
         team_id=team_thunder.id, author_user_id=admin.id,
-        title="📌 Season Rules & Code of Conduct",
+        title="Season Rules & Code of Conduct",
         body="Welcome to the Thunder U16 community hub!\n\n"
              "Please keep all discussions respectful and on-topic.\n"
              "• No spam or off-topic posts.\n"
@@ -485,60 +441,39 @@ def seed():
     db.session.add(post_pinned)
     db.session.flush()
     db.session.add(CommunityReply(
-        post_id=post_pinned.id, author_user_id=coach_ali.id,
-        body="Fully agreed! I'll be posting training tips here regularly. Stay tuned.",
+        post_id=post_pinned.id, author_user_id=admin.id,
+        body="All training tips will be posted here regularly. Stay tuned.",
     ))
 
-    # Training tip post by coach
     post_tip = CommunityPost(
-        team_id=team_thunder.id, author_user_id=coach_ali.id,
+        team_id=team_thunder.id, author_user_id=admin.id,
         title="Serving Tip: Use Your Whole Body",
         body="A lot of players only use their arm when serving. "
              "Remember — power comes from your legs and core. "
-             "Plant your feet, rotate your hips, and follow through. "
-             "Try this at the next practice and let me know how it feels!",
+             "Plant your feet, rotate your hips, and follow through.",
         category="tip", is_pinned=False,
     )
     db.session.add(post_tip)
     db.session.flush()
     db.session.add(CommunityReply(
-        post_id=post_tip.id, author_user_id=player_omar.id,
-        body="This helped a lot in practice today, coach! My float serve finally has some power.",
-    ))
-    db.session.add(CommunityReply(
-        post_id=post_tip.id, author_user_id=player_sara.id,
-        body="Been working on this for a week. Big improvement. Thanks Coach Ali!",
-    ))
-    db.session.add(CommunityReply(
-        post_id=post_tip.id, author_user_id=coach_ali.id,
-        body="Great to hear! Keep it up. We'll drill this more on Tuesday.",
+        post_id=post_tip.id, author_user_id=admin.id,
+        body="Great feedback from last practice — keep working on this technique.",
     ))
 
-    # Question post by player
     post_question = CommunityPost(
-        team_id=team_thunder.id, author_user_id=player_ziad.id,
+        team_id=team_thunder.id, author_user_id=admin.id,
         title="Best exercises to improve vertical jump?",
-        body="Coach mentioned we need better vertical for blocking. "
-             "Anyone have recommendations for off-court exercises I can do at home?",
+        body="We need better vertical for blocking. "
+             "Recommendations: box jumps, jump squats, and calf raises. "
+             "3 sets of 10 reps, 3x a week. Give it 4 weeks.",
         category="question", is_pinned=False,
     )
     db.session.add(post_question)
     db.session.flush()
-    db.session.add(CommunityReply(
-        post_id=post_question.id, author_user_id=coach_ali.id,
-        body="Great question Ziad! Box jumps, jump squats, and calf raises are your best friends. "
-             "3 sets of 10 reps, 3x a week. Give it 4 weeks and you'll notice the difference.",
-    ))
-    db.session.add(CommunityReply(
-        post_id=post_question.id, author_user_id=player_omar.id,
-        body="I also found jump rope really helps — 10 minutes daily makes a big difference.",
-    ))
-    db.session.flush()
 
-    # Poll post — Player of the Week
     post_poll = CommunityPost(
-        team_id=team_thunder.id, author_user_id=coach_ali.id,
-        title="🏆 Player of the Week — Vote Now!",
+        team_id=team_thunder.id, author_user_id=admin.id,
+        title="Player of the Week — Vote Now!",
         body="After last week's fantastic performance in training and the friendly match, "
              "vote for who you think deserves Player of the Week!",
         category="poll", is_pinned=False,
@@ -553,48 +488,43 @@ def seed():
     opt_ziad  = CommunityPollOption(poll_id=poll.id, label="Ziad Nasser")
     db.session.add_all([opt_omar, opt_sara, opt_ziad])
     db.session.flush()
-    # Pre-seed some votes so the poll looks active
-    db.session.add(CommunityPollVote(poll_id=poll.id, option_id=opt_omar.id, user_id=coach_ali.id))
-    db.session.add(CommunityPollVote(poll_id=poll.id, option_id=opt_omar.id, user_id=player_ziad.id))
-    db.session.add(CommunityPollVote(poll_id=poll.id, option_id=opt_sara.id,  user_id=player_lena.id))
+    # Pre-seed votes using admin so the poll looks active
+    db.session.add(CommunityPollVote(poll_id=poll.id, option_id=opt_omar.id, user_id=admin.id))
     db.session.flush()
 
-    # Lightning team question post
     post_lightning = CommunityPost(
-        team_id=team_lightning.id, author_user_id=coach_haydar.id,
+        team_id=team_lightning.id, author_user_id=admin.id,
         title="Tryout Preparation Tips",
         body="For everyone attending the open tryouts next week:\n"
              "• Get good sleep the night before.\n"
              "• Warm up for at least 15 minutes.\n"
              "• Focus on fundamentals — passing, setting, serving.\n"
-             "• We're looking for attitude and effort, not perfection.\n\n"
-             "See you there! — Coach Haydar",
+             "• We're looking for attitude and effort, not perfection.",
         category="tip", is_pinned=True,
     )
     db.session.add(post_lightning)
     db.session.flush()
     db.session.add(CommunityReply(
-        post_id=post_lightning.id, author_user_id=player_karim.id,
-        body="Thanks for the tips Coach! Really helpful. We'll be there early.",
+        post_id=post_lightning.id, author_user_id=admin.id,
+        body="See you at tryouts — arrive early to warm up!",
     ))
     db.session.flush()
 
     db.session.commit()
     print("Demo database seeded successfully.")
     print()
-    print("  All accounts use password: Password1!")
+    print("  Password for all accounts: Password1!")
     print()
-    print("  ADMIN   -> admin@rallyriot.com")
-    print("  COACH   -> ali@rallyriot.com      (Thunder U16 + Storm)")
-    print("  COACH   -> haydar@rallyriot.com   (Lightning U14)")
-    print("  PARENT  -> ahmad@rallyriot.com    (children: Omar, Ziad)")
-    print("  PARENT  -> fatima@rallyriot.com   (child: Sara)")
-    print("  PARENT  -> nour@rallyriot.com     (child: Karim - overdue invoice)")
-    print("  PLAYER  -> omar@rallyriot.com")
-    print("  PLAYER  -> sara@rallyriot.com")
-    print("  PLAYER  -> ziad@rallyriot.com")
-    print("  PLAYER  -> lena@rallyriot.com     (no RSVPs yet - good for live demo)")
-    print("  PLAYER  -> karim@rallyriot.com")
+    print("  ADMIN  -> admin@rallyriot.com")
+    print()
+    print("  PARENTS (pre-seeded, can log in immediately):")
+    print("    ahmad@rallyriot.com   (children: Omar, Ziad — paid + pending invoice)")
+    print("    fatima@rallyriot.com  (child: Sara — installment plan)")
+    print("    nour@rallyriot.com    (child: Karim — overdue invoice)")
+    print()
+    print("  COACHES / PLAYERS: create live during the demo via Admin > Users")
+    print("    Suggested demo coach:  coach@rallyriot.com / Password1!")
+    print("    Suggested demo player: player@rallyriot.com / Password1!")
 
 
 if __name__ == "__main__":
