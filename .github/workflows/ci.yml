@@ -91,5 +91,5 @@ jobs:
             [ "$status" = "healthy" ] && break
             sleep 3
           done
-          curl --fail http://localhost:5000/api/health
+          curl --fail http://localhost:5001/api/health
           docker compose down

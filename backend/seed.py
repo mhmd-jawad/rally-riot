@@ -13,7 +13,7 @@ from models_community import (
 from auth import hash_password
 from datetime import datetime, timedelta
 
-PASSWORD = "Demo1234!"
+PASSWORD = "Password1!"
 
 
 def seed():
@@ -532,7 +532,7 @@ def seed():
     db.session.commit()
     print("✅ Demo database seeded successfully.")
     print()
-    print("  All accounts use password: Demo1234!")
+    print("  All accounts use password: Password1!")
     print()
     print("  ADMIN   → admin@rallyriot.com")
     print("  COACH   → ali@rallyriot.com      (Thunder U16 + Storm)")
