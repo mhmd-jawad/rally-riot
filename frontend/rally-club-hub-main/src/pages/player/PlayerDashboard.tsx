@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,7 +41,7 @@ export default function PlayerDashboard() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date()).slice(0, 5);
+  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date()).slice(0, 5);
   const unreadNotifs = notifications.filter((n: any) => !n.is_read);
   const recentAnnouncements = announcements.slice(0, 3);
 
@@ -75,7 +76,7 @@ export default function PlayerDashboard() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                           <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{e.court || "TBD"}</span>
-                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(new Date(e.start_time), "MMM d, h:mm a")}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(e.start_time), "MMM d, h:mm a")}</span>
                         </div>
                       </div>
                     </div>
@@ -105,7 +106,7 @@ export default function PlayerDashboard() {
                       {a.priority === "high" && <Badge variant="destructive">High</Badge>}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">{a.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{a.team?.name} • {format(new Date(a.created_at), "MMM d")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{a.team?.name} • {format(parseUTC(a.created_at), "MMM d")}</p>
                   </div>
                 ))}
               </div>

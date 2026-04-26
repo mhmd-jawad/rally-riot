@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +58,7 @@ export default function AdminFinance() {
                       <td className="p-4 text-sm font-medium">${inv.amount?.toFixed(2)}</td>
                       <td className="p-4 text-sm">${inv.amount_paid?.toFixed(2)}</td>
                       <td className="p-4"><Badge variant="secondary" className={statusColor[inv.status] || ""}>{inv.status}</Badge></td>
-                      <td className="p-4 text-sm text-muted-foreground">{format(new Date(inv.created_at), "MMM d, yyyy")}</td>
+                      <td className="p-4 text-sm text-muted-foreground">{format(parseUTC(inv.created_at), "MMM d, yyyy")}</td>
                     </tr>
                   ))}
                 </tbody>

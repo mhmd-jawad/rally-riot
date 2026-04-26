@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -11,9 +12,123 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Plus, FileText, ClipboardList } from "lucide-react";
+import { Plus, FileText, ClipboardList, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+
+function DiscountManager({ form }: { form: any }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [discountType, setDiscountType] = useState("percentage");
+  const [value, setValue] = useState("");
+
+  const { data: discounts = [] } = useQuery({
+    queryKey: ["discounts", form.id],
+    queryFn: async () => (await api.invoices.listDiscounts(form.id)).data || [],
+    enabled: open,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.invoices.createDiscount({
+        form_id: form.id,
+        label: label.trim(),
+        discount_type: discountType,
+        value: parseFloat(value),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discounts", form.id] });
+      toast({ title: "Discount added" });
+      setLabel("");
+      setValue("");
+      setDiscountType("percentage");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.invoices.deleteDiscount(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["discounts", form.id] });
+      toast({ title: "Discount removed" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="mt-2 w-full">
+          <Tag className="w-3 h-3 mr-1" /> Manage Discounts
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Discounts — {form.title}</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-2">
+          {discounts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-2">No discounts defined</p>
+          ) : (
+            <div className="space-y-2">
+              {discounts.map((d: any) => (
+                <div key={d.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                  <span className="font-medium">{d.label}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {d.discount_type === "percentage" ? `${d.value}%` : `$${d.value.toFixed(2)}`}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-destructive"
+                      onClick={() => deleteMutation.mutate(d.id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t pt-4 space-y-3">
+            <p className="text-sm font-medium">Add Discount</p>
+            <div>
+              <Label className="text-xs">Label</Label>
+              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Sibling discount" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Type</Label>
+                <Select value={discountType} onValueChange={setDiscountType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Percentage (%)</SelectItem>
+                    <SelectItem value="fixed">Fixed ($)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Value</Label>
+                <Input type="number" min="0" value={value} onChange={e => setValue(e.target.value)} placeholder={discountType === "percentage" ? "e.g. 10" : "e.g. 25"} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending || !label.trim() || !value}
+          >
+            Add Discount
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function AdminRegistrations() {
   const { toast } = useToast();
@@ -127,6 +242,7 @@ export default function AdminRegistrations() {
                     <p>Season: {form.season || "—"}</p>
                     <p>Fee: ${form.fee?.toFixed(2) || "0.00"}</p>
                     <p>Waiver: {form.requires_waiver ? "Yes" : "No"}</p>
+                    <DiscountManager form={form} />
                   </CardContent>
                 </Card>
               ))}
@@ -151,7 +267,7 @@ export default function AdminRegistrations() {
                           <td className="p-4 text-sm">#{r.id}</td>
                           <td className="p-4 text-sm">{r.player?.full_name || `Player #${r.player_user_id}`}</td>
                           <td className="p-4 text-sm">{r.form?.title || `Form #${r.form_id}`}</td>
-                          <td className="p-4 text-sm text-muted-foreground">{r.submitted_at ? format(new Date(r.submitted_at), "MMM d, yyyy") : "—"}</td>
+                          <td className="p-4 text-sm text-muted-foreground">{r.submitted_at ? format(parseUTC(r.submitted_at), "MMM d, yyyy") : "—"}</td>
                           <td className="p-4"><Badge variant="secondary" className={statusColor[r.status] || ""}>{r.status}</Badge></td>
                           <td className="p-4">
                             <Select value={r.status} onValueChange={status => statusMutation.mutate({ id: r.id, status })}>

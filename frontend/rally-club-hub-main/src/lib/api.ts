@@ -81,6 +81,11 @@ export const teams = {
       method: "POST",
       body: JSON.stringify({ player_user_id: playerUserId }),
     }),
+  setPriority: (teamId: number, priority_level: number) =>
+    request(`/teams/${teamId}/priority`, {
+      method: "PATCH",
+      body: JSON.stringify({ priority_level }),
+    }),
 };
 
 // ── Parent-Child ────────────────────────────────────────────
@@ -112,6 +117,14 @@ export const events = {
   myCalendar: () => request<{ success: boolean; data: any[] }>("/events/my/calendar"),
   childSchedule: (childId: number) =>
     request<{ success: boolean; data: any[] }>(`/events/child/${childId}/schedule`),
+  createRecurring: (data: {
+    team_id: number; event_type: string; title: string; court: string;
+    start_date: string; end_date: string; days_of_week: number[];
+    start_hour: number; start_minute: number; duration_minutes: number;
+    description?: string;
+  }) => request("/events/recurring", { method: "POST", body: JSON.stringify(data) }),
+  deleteRecurringSeries: (ruleId: number) =>
+    request(`/events/recurring/${ruleId}`, { method: "DELETE" }),
 };
 
 // ── Registration ────────────────────────────────────────────
@@ -155,6 +168,16 @@ export const invoices = {
     request(`/invoices/${id}/pay`, { method: "PATCH" }),
   pay: (id: number) =>
     request(`/invoices/${id}/pay`, { method: "PATCH" }),
+  getInstallments: (invoiceId: number) =>
+    request<{ success: boolean; data: any }>(`/invoices/${invoiceId}/installments`),
+  payInstallment: (paymentId: number) =>
+    request(`/invoices/installments/${paymentId}/pay`, { method: "PATCH" }),
+  createDiscount: (data: { form_id: number; label: string; discount_type: string; value: number }) =>
+    request("/invoices/discounts", { method: "POST", body: JSON.stringify(data) }),
+  listDiscounts: (formId: number) =>
+    request<{ success: boolean; data: any[] }>(`/invoices/discounts/${formId}`),
+  deleteDiscount: (discountId: number) =>
+    request(`/invoices/discounts/${discountId}`, { method: "DELETE" }),
 };
 
 // ── RSVPs ───────────────────────────────────────────────────
@@ -167,10 +190,14 @@ export const rsvps = {
 
 // ── Attendance ──────────────────────────────────────────────
 export const attendance = {
-  mark: (data: { event_id: number; player_user_id: number; status: string }) =>
+  mark: (data: { event_id: number; player_user_id: number; status: string; absence_reason?: string }) =>
     request("/attendance/", { method: "POST", body: JSON.stringify(data) }),
   forEvent: (eventId: number) =>
     request<{ success: boolean; data: any[] }>(`/attendance/event/${eventId}`),
+  summary: (params?: { team_id?: number; player_id?: number }) => {
+    const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])).toString() : "";
+    return request<{ success: boolean; data: any }>(`/attendance/summary${qs}`);
+  },
 };
 
 // ── Announcements ───────────────────────────────────────────
@@ -188,6 +215,7 @@ export const announcements = {
 // ── Notifications ───────────────────────────────────────────
 export const notifications = {
   list: () => request<{ success: boolean; data: any[] }>("/notifications/"),
+  sendReminders: () => request<{ success: boolean; message: string }>("/notifications/send-reminders", { method: "POST" }),
   markRead: (id: number) =>
     request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () =>

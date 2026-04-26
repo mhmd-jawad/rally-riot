@@ -5,6 +5,7 @@ import logging.config
 import logging.handlers
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from config import Config
 from extensions import db
@@ -81,10 +82,22 @@ def create_app(config_class=Config):
         record_request(response.status_code)
         return response
 
+    # ── Background scheduler for event reminders ────────────────
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        def run_reminders():
+            with app.app_context():
+                from services import ReminderService
+                ReminderService.send_upcoming_reminders(hours_ahead=24)
+
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(run_reminders, "interval", hours=1, id="event_reminders")
+        scheduler.start()
+
     # ── Health check ────────────────────────────────────────────
     @app.route("/api/health")
     def health():
         return jsonify({"status": "ok", "message": "RallyRiot API is running"})
+
 
     # ── Global error handlers ───────────────────────────────────
     @app.errorhandler(404)

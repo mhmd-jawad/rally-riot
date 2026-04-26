@@ -190,7 +190,8 @@ def submit_registration():
     # Auto-generate invoice if form has a fee
     invoice = None
     if form.fee and form.fee > 0:
-        invoice = InvoiceService.generate_from_registration(reg, form)
+        num_installments = max(1, int(data.get("num_installments", 1)))
+        invoice = InvoiceService.generate_from_registration(reg, form, num_installments=num_installments)
 
     db.session.commit()
 

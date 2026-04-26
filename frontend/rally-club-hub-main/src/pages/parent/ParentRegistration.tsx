@@ -14,6 +14,7 @@ export default function ParentRegistration() {
   const [selectedForm, setSelectedForm] = useState("");
   const [selectedChild, setSelectedChild] = useState("");
   const [waiverFile, setWaiverFile] = useState<File | null>(null);
+  const [numInstallments, setNumInstallments] = useState("1");
 
   const { data: children = [] } = useQuery({
     queryKey: ["my-children"],
@@ -35,7 +36,8 @@ export default function ParentRegistration() {
       const response = await api.registrations.submit({
         form_id: Number(selectedForm),
         player_user_id: Number(selectedChild),
-      });
+        num_installments: Number(numInstallments),
+      } as any);
 
       if (selectedFormDetails?.requires_waiver && waiverFile) {
         await api.registrations.uploadWaiver(response.data.registration.id, waiverFile);
@@ -54,6 +56,7 @@ export default function ParentRegistration() {
       setSelectedForm("");
       setSelectedChild("");
       setWaiverFile(null);
+      setNumInstallments("1");
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -105,6 +108,25 @@ export default function ParentRegistration() {
               </Select>
             </div>
           </div>
+          {selectedFormDetails && selectedFormDetails.fee > 0 && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">Payment Installments</label>
+              <Select value={numInstallments} onValueChange={setNumInstallments}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Pay in full</SelectItem>
+                  <SelectItem value="2">2 installments</SelectItem>
+                  <SelectItem value="3">3 installments</SelectItem>
+                  <SelectItem value="4">4 installments</SelectItem>
+                </SelectContent>
+              </Select>
+              {Number(numInstallments) > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fee of ${selectedFormDetails.fee.toFixed(2)} split into {numInstallments} monthly payments of ~${(selectedFormDetails.fee / Number(numInstallments)).toFixed(2)} each.
+                </p>
+              )}
+            </div>
+          )}
           {selectedFormDetails?.requires_waiver && (
             <div>
               <label className="text-sm font-medium mb-1 block">Waiver File</label>
