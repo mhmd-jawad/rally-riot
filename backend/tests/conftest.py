@@ -61,7 +61,7 @@ def seed_users(client):
 
     login_resp = client.post("/api/auth/login", json={
         "email": "admin@rallyriot.com",
-        "password": "Demo1234!",
+        "password": "Password1!",
     })
     admin_token = login_resp.get_json()["data"]["token"]
 
