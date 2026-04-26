@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { StatCard } from "@/components/StatCard";
@@ -21,7 +22,7 @@ export default function CoachDashboard() {
     queryFn: async () => (await api.announcements.list()).data || [],
   });
 
-  const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date()).slice(0, 5);
+  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date()).slice(0, 5);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -50,7 +51,7 @@ export default function CoachDashboard() {
                       <p className="font-medium text-sm">{e.title}</p>
                       <p className="text-xs text-muted-foreground">{e.event_type} • {e.court || "TBD"}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{format(new Date(e.start_time), "MMM d, h:mm a")}</span>
+                    <span className="text-xs text-muted-foreground">{format(parseUTC(e.start_time), "MMM d, h:mm a")}</span>
                   </div>
                 ))}
               </div>

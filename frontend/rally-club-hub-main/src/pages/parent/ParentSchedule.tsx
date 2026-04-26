@@ -1,3 +1,4 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -39,8 +40,8 @@ export default function ParentSchedule() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const upcomingEvents = events.filter((e: any) => new Date(e.start_time) >= new Date());
-  const pastEvents = events.filter((e: any) => new Date(e.start_time) < new Date());
+  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
+  const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
 
   const childId = selectedChild ? Number(selectedChild) : null;
 
@@ -86,7 +87,7 @@ export default function ParentSchedule() {
                           </div>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(new Date(event.start_time), "MMM d, h:mm a")}</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(event.start_time), "MMM d, h:mm a")}</span>
                           </div>
                         </div>
                         {childId && (
@@ -118,7 +119,7 @@ export default function ParentSchedule() {
                     <CardContent className="py-3">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-sm">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{format(new Date(event.start_time), "MMM d")}</span>
+                        <span className="text-xs text-muted-foreground">{format(parseUTC(event.start_time), "MMM d")}</span>
                       </div>
                     </CardContent>
                   </Card>

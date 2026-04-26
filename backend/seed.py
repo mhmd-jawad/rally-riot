@@ -15,7 +15,7 @@ def seed():
         print("⚠  Database already seeded – skipping.")
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     # ── Users ──────────────────────────────────────────────────
     admin = User(full_name="Admin User", email="admin@rallyriot.com",

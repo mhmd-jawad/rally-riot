@@ -1,8 +1,10 @@
+import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle, Clock, Minus } from "lucide-react";
@@ -13,6 +15,7 @@ export default function CoachAttendance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedEvent, setSelectedEvent] = useState("");
+  const [absenceReasons, setAbsenceReasons] = useState<Record<number, string>>({});
 
   // Load only this coach's events (via my/calendar)
   const { data: events = [] } = useQuery({
@@ -47,8 +50,8 @@ export default function CoachAttendance() {
   });
 
   const markMutation = useMutation({
-    mutationFn: ({ playerId, status }: { playerId: number; status: string }) =>
-      api.attendance.mark({ event_id: Number(selectedEvent), player_user_id: playerId, status }),
+    mutationFn: ({ playerId, status, absence_reason }: { playerId: number; status: string; absence_reason?: string }) =>
+      api.attendance.mark({ event_id: Number(selectedEvent), player_user_id: playerId, status, absence_reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance", selectedEvent] });
       toast({ title: "Attendance recorded" });
@@ -59,6 +62,11 @@ export default function CoachAttendance() {
   const getAttendanceStatus = (playerId: number) => {
     const rec = (attendance as any[]).find((a: any) => a.player_user_id === playerId);
     return rec?.status || null;
+  };
+
+  const getAbsenceReason = (playerId: number) => {
+    const rec = (attendance as any[]).find((a: any) => a.player_user_id === playerId);
+    return rec?.absence_reason || "";
   };
 
   const getRsvpStatus = (playerId: number) => {
@@ -87,7 +95,7 @@ export default function CoachAttendance() {
             <SelectContent>
               {events.map((e: any) => (
                 <SelectItem key={e.id} value={String(e.id)}>
-                  {e.title} — {format(new Date(e.start_time), "MMM d, h:mm a")}
+                  {e.title} — {format(parseUTC(e.start_time), "MMM d, h:mm a")}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -119,6 +127,7 @@ export default function CoachAttendance() {
                       <th className="p-3">RSVP</th>
                       <th className="p-3">Attendance</th>
                       <th className="p-3">Actions</th>
+                      <th className="p-3">Absence Reason</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -127,6 +136,8 @@ export default function CoachAttendance() {
                       const playerName = tp.full_name ?? `Player #${playerId}`;
                       const attStatus = getAttendanceStatus(playerId);
                       const rsvpStatus = getRsvpStatus(playerId);
+                      const savedReason = getAbsenceReason(playerId);
+                      const draftReason = absenceReasons[playerId] ?? savedReason;
                       return (
                         <tr key={playerId} className="border-b last:border-0 hover:bg-muted/50">
                           <td className="p-3 font-medium text-sm">{playerName}</td>
@@ -159,10 +170,27 @@ export default function CoachAttendance() {
                                 Present
                               </Button>
                               <Button size="sm" variant={attStatus === "absent" ? "destructive" : "outline"}
-                                onClick={() => markMutation.mutate({ playerId, status: "absent" })}>
+                                onClick={() => markMutation.mutate({ playerId, status: "absent", absence_reason: absenceReasons[playerId] || undefined })}>
                                 Absent
                               </Button>
                             </div>
+                          </td>
+                          <td className="p-3">
+                            {attStatus === "absent" ? (
+                              <Input
+                                className="h-8 text-sm w-48"
+                                placeholder="Optional reason…"
+                                value={draftReason}
+                                onChange={e => setAbsenceReasons(prev => ({ ...prev, [playerId]: e.target.value }))}
+                                onBlur={() => {
+                                  if (draftReason !== savedReason) {
+                                    markMutation.mutate({ playerId, status: "absent", absence_reason: draftReason || undefined });
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
                           </td>
                         </tr>
                       );
