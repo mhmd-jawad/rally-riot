@@ -87,7 +87,7 @@ def create_app(config_class=Config):
 
     @app.after_request
     def log_response(response):
-        logger.info("%s %s → %d", request.method, request.path, response.status_code)
+        logger.info("%s %s -> %d", request.method, request.path, response.status_code)
         record_request(response.status_code)
         return response
 

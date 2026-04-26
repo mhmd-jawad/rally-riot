@@ -58,29 +58,39 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
-        <div className="p-4 border-b border-sidebar-border">
+        <div className="p-4 border-b border-sidebar-border/70">
           {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-                <Trophy className="w-4 h-4 text-black" />
-              </div>
-              <span className="font-bold text-sidebar-accent-foreground text-lg tracking-tight">RallyRiot</span>
+            <div className="flex h-14 items-center">
+              <img
+                src="/rallyriot.png"
+                alt="RallyRiot"
+                className="h-12 w-auto max-w-[190px] object-contain drop-shadow-[0_10px_24px_rgba(249,115,22,0.32)]"
+              />
             </div>
           )}
           {collapsed && (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center mx-auto shadow-lg shadow-orange-500/20">
-              <Trophy className="w-4 h-4 text-black" />
+            <div className="mx-auto flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg">
+              <img
+                src="/rallyriot.png"
+                alt="RallyRiot"
+                className="h-10 w-10 object-contain drop-shadow-[0_8px_18px_rgba(249,115,22,0.35)]"
+              />
             </div>
           )}
         </div>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-orange-400/60 uppercase text-xs tracking-widest">{roleLabel} Menu</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[hsl(var(--role-secondary))]/80 uppercase text-xs tracking-widest">{roleLabel} Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end={item.url.split("/").length <= 2} className="hover:bg-sidebar-accent hover:text-orange-300 transition-colors" activeClassName="bg-sidebar-accent text-orange-400 font-medium border-l-2 border-orange-500">
+                    <NavLink
+                      to={item.url}
+                      end={item.url.split("/").length <= 2}
+                      className="sidebar-nav-link transition-colors"
+                      activeClassName="sidebar-nav-link-active font-medium"
+                    >
                       <item.icon className="mr-2 h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
@@ -94,7 +104,7 @@ export function AppSidebar() {
           <div className="px-2 pb-2">
             <button
               onClick={() => window.dispatchEvent(new CustomEvent("rally:open-ai-chat"))}
-              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-400 hover:bg-sidebar-accent transition-colors border border-orange-500/20"
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[hsl(var(--role-secondary))] hover:bg-sidebar-accent transition-colors border border-[hsl(var(--role-primary)_/_0.28)]"
             >
               <Bot className="h-4 w-4 flex-shrink-0" />
               {!collapsed && <span>AI Assistant</span>}
@@ -104,12 +114,12 @@ export function AppSidebar() {
         {!collapsed && profile && (
           <div className="mt-auto p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500/20 to-yellow-500/10 border border-orange-400/20 flex items-center justify-center">
-                <User className="w-4 h-4 text-orange-400" />
+              <div className="role-icon-tile w-8 h-8 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-[hsl(var(--role-secondary))]" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-accent-foreground truncate">{profile.full_name}</p>
-                <p className="text-xs text-orange-400/60 truncate">{roleLabel}</p>
+                <p className="text-xs text-[hsl(var(--role-secondary))]/70 truncate">{roleLabel}</p>
               </div>
             </div>
           </div>

@@ -15,17 +15,17 @@ export function AppHeader() {
   };
 
   return (
-    <header className="h-14 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0">
+    <header className="app-header h-14 border-b backdrop-blur-xl flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-2">
-        <SidebarTrigger className="text-muted-foreground hover:text-orange-400 transition-colors" />
+        <SidebarTrigger className="text-muted-foreground hover:text-[hsl(var(--role-secondary))] transition-colors" />
         <span className="text-sm font-medium text-muted-foreground capitalize">
-          <span className="text-orange-400">{role}</span> Dashboard
+          <span className="role-text-gradient font-semibold">{role}</span> Dashboard
         </span>
       </div>
       <div className="flex items-center gap-2">
         <NotificationsDropdown />
         <span className="text-sm text-muted-foreground hidden sm:inline">{profile?.full_name}</span>
-        <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="hover:text-orange-400 hover:bg-orange-500/10">
+        <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" className="hover:bg-primary/10 hover:text-[hsl(var(--role-secondary))]">
           <LogOut className="h-4 w-4" />
         </Button>
       </div>

@@ -15,11 +15,61 @@ from datetime import datetime, timedelta
 
 PASSWORD = "Password1!"
 
+DEMO_USERS = [
+    ("Mohammad Al-Admin", "admin@rallyriot.com", "admin"),
+    ("Ali Hassan", "ali@rallyriot.com", "coach"),
+    ("Haydar Karimi", "haydar@rallyriot.com", "coach"),
+    ("Omar Al-Rashid", "omar@rallyriot.com", "player"),
+    ("Sara Khalil", "sara@rallyriot.com", "player"),
+    ("Ziad Nasser", "ziad@rallyriot.com", "player"),
+    ("Lena Farouk", "lena@rallyriot.com", "player"),
+    ("Karim Mansour", "karim@rallyriot.com", "player"),
+    ("Ahmad Al-Rashid", "ahmad@rallyriot.com", "parent"),
+    ("Fatima Khalil", "fatima@rallyriot.com", "parent"),
+    ("Nour Mansour", "nour@rallyriot.com", "parent"),
+]
+
+
+def ensure_demo_accounts():
+    """Create or repair the known demo accounts without touching other users."""
+    changed = False
+    password_hash = hash_password(PASSWORD)
+
+    for full_name, email, role in DEMO_USERS:
+        user = User.query.filter_by(email=email).first()
+        if user is None:
+            db.session.add(User(
+                full_name=full_name,
+                email=email,
+                password_hash=password_hash,
+                role=role,
+                is_active=True,
+            ))
+            changed = True
+            continue
+
+        updates = {
+            "full_name": full_name,
+            "role": role,
+            "password_hash": password_hash,
+            "is_active": True,
+        }
+        for field, value in updates.items():
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                changed = True
+
+    if changed:
+        db.session.commit()
+    return changed
+
 
 def seed():
     """Populate the DB with rich demo data. Safe to call on an existing DB."""
     if User.query.first():
-        print("⚠  Database already seeded – skipping.")
+        if ensure_demo_accounts():
+            print("Demo accounts created or repaired.")
+        print("Database already seeded - skipping.")
         return
 
     now = datetime.utcnow()
@@ -530,21 +580,21 @@ def seed():
     db.session.flush()
 
     db.session.commit()
-    print("✅ Demo database seeded successfully.")
+    print("Demo database seeded successfully.")
     print()
     print("  All accounts use password: Password1!")
     print()
-    print("  ADMIN   → admin@rallyriot.com")
-    print("  COACH   → ali@rallyriot.com      (Thunder U16 + Storm)")
-    print("  COACH   → haydar@rallyriot.com   (Lightning U14)")
-    print("  PARENT  → ahmad@rallyriot.com    (children: Omar, Ziad)")
-    print("  PARENT  → fatima@rallyriot.com   (child: Sara)")
-    print("  PARENT  → nour@rallyriot.com     (child: Karim — overdue invoice)")
-    print("  PLAYER  → omar@rallyriot.com")
-    print("  PLAYER  → sara@rallyriot.com")
-    print("  PLAYER  → ziad@rallyriot.com")
-    print("  PLAYER  → lena@rallyriot.com     (no RSVPs yet — good for live demo)")
-    print("  PLAYER  → karim@rallyriot.com")
+    print("  ADMIN   -> admin@rallyriot.com")
+    print("  COACH   -> ali@rallyriot.com      (Thunder U16 + Storm)")
+    print("  COACH   -> haydar@rallyriot.com   (Lightning U14)")
+    print("  PARENT  -> ahmad@rallyriot.com    (children: Omar, Ziad)")
+    print("  PARENT  -> fatima@rallyriot.com   (child: Sara)")
+    print("  PARENT  -> nour@rallyriot.com     (child: Karim - overdue invoice)")
+    print("  PLAYER  -> omar@rallyriot.com")
+    print("  PLAYER  -> sara@rallyriot.com")
+    print("  PLAYER  -> ziad@rallyriot.com")
+    print("  PLAYER  -> lena@rallyriot.com     (no RSVPs yet - good for live demo)")
+    print("  PLAYER  -> karim@rallyriot.com")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,33 @@
  * REST API client – replaces the Supabase client.
  * All calls go to the Python Flask backend.
  */
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL || "http://localhost:5001/api");
+const LOCAL_API_FALLBACKS = ["http://localhost:5001/api", "http://localhost:5000/api"];
+
+type ApiError = Error & { status?: number; data?: unknown };
+
+function normalizeApiBase(base: string): string {
+  return base.replace(/\/+$/, "");
+}
+
+function isLocalApiBase(base: string): boolean {
+  try {
+    const url = new URL(base, window.location.origin);
+    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getApiBases(): string[] {
+  const bases = [API_BASE];
+  if (isLocalApiBase(API_BASE)) bases.push(...LOCAL_API_FALLBACKS);
+  return Array.from(new Set(bases.map(normalizeApiBase)));
+}
+
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError;
+}
 
 function getToken(): string | null {
   return localStorage.getItem("token");
@@ -17,7 +43,31 @@ async function request<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  let lastNetworkError: unknown;
+
+  for (const base of getApiBases()) {
+    try {
+      return await requestFromBase<T>(base, path, options);
+    } catch (error) {
+      if (isNetworkError(error) && isLocalApiBase(base)) {
+        lastNetworkError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastNetworkError instanceof Error
+    ? lastNetworkError
+    : new Error("Unable to reach the API server.");
+}
+
+async function requestFromBase<T = any>(
+  base: string,
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const url = `${base}${path}`;
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const res = await fetch(url, {
     ...options,
@@ -30,9 +80,9 @@ async function request<T = any>(
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const message = json.message || json.error || `Request failed (${res.status})`;
-    const err = new Error(message);
-    (err as any).status = res.status;
-    (err as any).data = json;
+    const err: ApiError = new Error(message);
+    err.status = res.status;
+    err.data = json;
     throw err;
   }
   return json;

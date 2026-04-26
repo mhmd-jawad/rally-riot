@@ -3,14 +3,14 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Loader2, Lock, Mail, Shield, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 
 const demoAccounts = [
-  { label: "Admin",  email: "admin@rallyriot.com", password: "Password1!", gradient: "from-orange-500 to-red-500" },
-  { label: "Coach",  email: "ali@rallyriot.com",   password: "Password1!", gradient: "from-blue-500 to-cyan-500" },
-  { label: "Parent", email: "ahmad@rallyriot.com", password: "Password1!", gradient: "from-green-500 to-emerald-500" },
-  { label: "Player", email: "omar@rallyriot.com",  password: "Password1!", gradient: "from-yellow-500 to-amber-500" },
+  { label: "Admin", email: "admin@rallyriot.com", password: "Password1!", gradient: "from-orange-500 to-rose-500", icon: Shield },
+  { label: "Coach", email: "ali@rallyriot.com", password: "Password1!", gradient: "from-cyan-500 to-blue-500", icon: ClipboardCheck },
+  { label: "Parent", email: "ahmad@rallyriot.com", password: "Password1!", gradient: "from-emerald-500 to-lime-500", icon: Users },
+  { label: "Player", email: "omar@rallyriot.com", password: "Password1!", gradient: "from-yellow-400 to-orange-500", icon: Trophy },
 ];
 
 export default function LoginPage() {
@@ -27,13 +27,17 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) { toast.error("Please fill in all fields"); return; }
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
     setIsLoading(true);
     try {
       await signIn(email, password);
       toast.success("Welcome back!");
-    } catch (err: any) {
-      toast.error(err.message || "Login failed");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -44,100 +48,145 @@ export default function LoginPage() {
     try {
       await signIn(demoEmail, demoPassword);
       toast.success("Welcome to the demo!");
-    } catch {
-      toast.error("Demo account not set up yet. Please seed the database first.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Demo login failed.";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background glow effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-orange-500/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-yellow-500/6 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Back button */}
+    <div className="login-shell relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <button
         onClick={() => navigate("/")}
-        className="absolute top-6 left-6 flex items-center gap-2 text-orange-300/60 hover:text-orange-300 transition-colors text-sm"
+        className="absolute left-6 top-6 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm text-white/80 backdrop-blur-md transition-colors hover:border-orange-300/40 hover:text-white"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <ArrowLeft className="h-4 w-4" />
         Back
       </button>
 
-      <div className="w-full max-w-md space-y-6 relative z-10">
-        {/* Logo */}
-        <div className="text-center">
-          <img src="/rallyriot.png" alt="RallyRiot" className="h-20 mx-auto mb-4 object-contain" />
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-300 to-yellow-400 bg-clip-text text-transparent">
-            Welcome Back
-          </h1>
-          <p className="text-orange-100/50 mt-1 text-sm">Sign in to manage your volleyball club</p>
-        </div>
+      <div className="relative z-10 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="login-hero-panel overflow-hidden rounded-2xl border border-white/10 p-6 text-white shadow-2xl backdrop-blur-xl md:p-8">
+          <div className="flex items-center gap-4">
+            <img src="/rallyriot.png" alt="RallyRiot" className="h-16 object-contain drop-shadow-[0_14px_28px_rgba(249,115,22,0.35)]" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-orange-200/80">Club Hub</p>
+              <h1 className="text-3xl font-bold leading-tight md:text-5xl">
+                Welcome back to{" "}
+                <span className="bg-gradient-to-r from-orange-200 via-yellow-200 to-cyan-200 bg-clip-text text-transparent">
+                  RallyRiot
+                </span>
+              </h1>
+            </div>
+          </div>
 
-        {/* Sign In Form */}
-        <div className="rounded-2xl bg-white/5 border border-orange-300/10 backdrop-blur-sm p-6 space-y-4">
+          <div className="mt-10 grid gap-3 sm:grid-cols-2">
+            {demoAccounts.map((d) => {
+              const Icon = d.icon;
+              return (
+                <button
+                  key={d.label}
+                  disabled={isLoading}
+                  onClick={() => handleDemoLogin(d.email, d.password)}
+                  className="group rounded-xl border border-white/10 bg-white/10 p-4 text-left backdrop-blur-md transition-all hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/15 disabled:opacity-50"
+                >
+                  <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${d.gradient} text-black shadow-lg transition-transform group-hover:scale-105`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className="font-semibold text-white">{d.label}</p>
+                  <p className="mt-1 text-xs text-white/55">{d.email}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-8 grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-xl border border-orange-300/20 bg-orange-400/10 px-3 py-4">
+              <p className="text-2xl font-bold text-orange-200">4</p>
+              <p className="text-xs uppercase tracking-wide text-orange-100/55">Roles</p>
+            </div>
+            <div className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-4">
+              <p className="text-2xl font-bold text-cyan-200">Live</p>
+              <p className="text-xs uppercase tracking-wide text-cyan-100/55">Teams</p>
+            </div>
+            <div className="rounded-xl border border-lime-300/20 bg-lime-400/10 px-3 py-4">
+              <p className="text-2xl font-bold text-lime-200">Demo</p>
+              <p className="text-xs uppercase tracking-wide text-lime-100/55">Ready</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="login-card rounded-2xl border border-white/15 p-6 shadow-2xl backdrop-blur-xl md:p-8">
+          <div className="mb-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-200/75">Sign In</p>
+            <h2 className="mt-2 text-3xl font-bold text-white">Enter the court</h2>
+            <p className="mt-2 text-sm text-white/55">Use your club account or jump into a demo role.</p>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-orange-100/80 text-sm">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="bg-white/5 border-orange-300/20 text-white placeholder:text-white/30 focus:border-orange-400/60 focus:ring-orange-400/20"
-              />
+              <Label htmlFor="email" className="text-sm text-white/75">Email</Label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/60" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="h-12 border-white/15 bg-white/10 pl-10 text-white placeholder:text-white/35 focus-visible:ring-orange-300/45"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-orange-100/80 text-sm">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="bg-white/5 border-orange-300/20 text-white placeholder:text-white/30 focus:border-orange-400/60 focus:ring-orange-400/20"
-              />
+              <Label htmlFor="password" className="text-sm text-white/75">Password</Label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/60" />
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  className="h-12 border-white/15 bg-white/10 pl-10 text-white placeholder:text-white/35 focus-visible:ring-orange-300/45"
+                />
+              </div>
             </div>
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 disabled:opacity-50 text-black rounded-xl font-semibold transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center gap-2"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 via-yellow-400 to-cyan-400 py-3 font-semibold text-slate-950 shadow-lg shadow-orange-500/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-cyan-500/20 disabled:opacity-50"
             >
-              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               Sign In
             </button>
           </form>
-        </div>
 
-        {/* Demo Accounts */}
-        <div className="rounded-2xl bg-white/5 border border-orange-300/10 backdrop-blur-sm p-6">
-          <p className="text-orange-100/70 font-semibold text-sm mb-1">Demo Accounts</p>
-          <p className="text-orange-100/40 text-xs mb-4">Quick login to explore each role</p>
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-xs uppercase tracking-[0.2em] text-white/40">Demo Accounts</span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             {demoAccounts.map((d) => (
               <button
                 key={d.label}
                 disabled={isLoading}
                 onClick={() => handleDemoLogin(d.email, d.password)}
-                className="flex items-center gap-2 px-4 py-3 rounded-xl border border-orange-300/10 bg-white/3 hover:bg-white/8 hover:border-orange-300/25 transition-all duration-200 disabled:opacity-50 text-sm text-white/80 hover:text-white"
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/80 transition-all duration-200 hover:border-orange-200/35 hover:bg-white/15 hover:text-white disabled:opacity-50"
               >
-                <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${d.gradient} flex-shrink-0`} />
+                <div className={`h-2 w-2 flex-shrink-0 rounded-full bg-gradient-to-r ${d.gradient}`} />
                 {d.label}
               </button>
             ))}
           </div>
-          <p className="text-xs text-orange-100/30 mt-4 text-center">
+          <p className="mt-5 text-center text-xs text-white/40">
             All demo passwords:{" "}
-            <code className="bg-white/10 px-1.5 py-0.5 rounded text-orange-200/60">Password1!</code>
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-orange-100">Password1!</code>
           </p>
-        </div>
-
-        <p className="text-center text-xs text-orange-100/30">
-          Demo accounts are admin-managed for this Sprint 1 build.
-        </p>
+        </section>
       </div>
     </div>
   );
