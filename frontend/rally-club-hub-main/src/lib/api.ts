@@ -2,7 +2,7 @@
  * REST API client – replaces the Supabase client.
  * All calls go to the Python Flask backend.
  */
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 
 function getToken(): string | null {
   return localStorage.getItem("token");
