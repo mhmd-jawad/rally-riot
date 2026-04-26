@@ -4,15 +4,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2, Lock, Mail, Shield, Trophy, User, Users } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Loader2, Lock, Mail, Shield, Trophy, User, Users } from "lucide-react";
 import { toast } from "sonner";
 
-// Only accounts that exist in the seed.
+// One demo shortcut for each role that exists in the seed.
 const demoAccounts = [
   { label: "Admin", email: "admin@rallyriot.com", password: "Password1!", gradient: "from-orange-500 to-rose-500", icon: Shield },
-  { label: "Parent (Ahmad)", email: "ahmad@rallyriot.com", password: "Password1!", gradient: "from-emerald-500 to-lime-500", icon: Users },
-  { label: "Parent (Fatima)", email: "fatima@rallyriot.com", password: "Password1!", gradient: "from-teal-500 to-cyan-500", icon: Users },
-  { label: "Parent (Nour)", email: "nour@rallyriot.com", password: "Password1!", gradient: "from-violet-500 to-purple-500", icon: Users },
+  { label: "Coach", email: "ali@rallyriot.com", password: "Password1!", gradient: "from-cyan-500 to-blue-500", icon: ClipboardCheck },
+  { label: "Parent", email: "ahmad@rallyriot.com", password: "Password1!", gradient: "from-emerald-500 to-lime-500", icon: Users },
+  { label: "Player", email: "omar@rallyriot.com", password: "Password1!", gradient: "from-yellow-400 to-orange-500", icon: Trophy },
 ];
 
 export default function LoginPage() {

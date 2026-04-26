@@ -1,20 +1,14 @@
-"""Seed the database with demo data — professor demo build.
+"""Seed the database with demo data for the RallyRiot demo build.
 
 Demo narrative
 --------------
 1. Log in as Admin (admin@rallyriot.com / Password1!)
-2. Show the Admin dashboard — teams, events, registrations, finance all exist as
+2. Show the Admin dashboard - teams, events, registrations, finance all exist as
    background data to make the club feel real.
-3. LIVE: Admin creates a new Coach account → assigns them to Thunder U16.
-4. LIVE: Admin creates a new Player account → assigns them to Thunder U16.
-5. Log in as the newly created Coach → see their team, create an event, mark attendance.
-6. Log in as the newly created Player → see their schedule, RSVP.
-7. Switch to Parent accounts (ahmad / fatima / nour) to show payments, child schedule.
-
-Coaches / players in the sample data are NOT pre-created as login accounts.
-All historical events, attendance records, and community posts are authored by the
-admin user so the data looks real without requiring separate coach/player logins to
-already exist.
+3. Use the four demo shortcuts: Admin, Coach, Parent, and Player.
+4. Log in as Coach (ali@rallyriot.com / Password1!) to see assigned teams.
+5. Log in as Player (omar@rallyriot.com / Password1!) to see their schedule.
+6. Switch to Parent accounts (ahmad / fatima / nour) to show payments and child schedules.
 """
 from extensions import db
 from models import (
@@ -27,35 +21,39 @@ from models_community import (
     CommunityPost, CommunityReply, CommunityPoll,
     CommunityPollOption, CommunityPollVote,
 )
-from auth import hash_password
+from auth import check_password, hash_password
 from datetime import datetime, timedelta
 
 PASSWORD = "Password1!"
 
-# Only accounts that must survive an ensure_demo_accounts() repair pass.
-# Coaches and players are NOT listed here — they are created live during the demo.
+# Accounts used by the sign-in demo buttons.
 DEMO_USERS = [
-    ("Mohammad Al-Admin", "admin@rallyriot.com",   "admin"),
-    ("Ahmad Al-Rashid",   "ahmad@rallyriot.com",   "parent"),
-    ("Fatima Khalil",     "fatima@rallyriot.com",  "parent"),
-    ("Nour Mansour",      "nour@rallyriot.com",    "parent"),
+    ("Mohammad Al-Admin", "admin@rallyriot.com", "admin", 0.0),
+    ("Ali Hassan", "ali@rallyriot.com", "coach", 0.0),
+    ("Omar Al-Rashid", "omar@rallyriot.com", "player", 0.0),
+    ("Ahmad Al-Rashid", "ahmad@rallyriot.com", "parent", 500.0),
+    ("Fatima Khalil", "fatima@rallyriot.com", "parent", 300.0),
+    ("Nour Mansour", "nour@rallyriot.com", "parent", 50.0),
 ]
 
 
 def ensure_demo_accounts():
     """Create or repair the known demo accounts without touching other users."""
     changed = False
-    password_hash = hash_password(PASSWORD)
+    password_hash = None
 
-    for full_name, email, role in DEMO_USERS:
+    for full_name, email, role, wallet_balance in DEMO_USERS:
         user = User.query.filter_by(email=email).first()
         if user is None:
+            if password_hash is None:
+                password_hash = hash_password(PASSWORD)
             db.session.add(User(
                 full_name=full_name,
                 email=email,
                 password_hash=password_hash,
                 role=role,
                 is_active=True,
+                wallet_balance=wallet_balance,
             ))
             changed = True
             continue
@@ -63,13 +61,51 @@ def ensure_demo_accounts():
         updates = {
             "full_name": full_name,
             "role": role,
-            "password_hash": password_hash,
             "is_active": True,
+            "wallet_balance": wallet_balance,
         }
         for field, value in updates.items():
             if getattr(user, field) != value:
                 setattr(user, field, value)
                 changed = True
+        if not check_password(PASSWORD, user.password_hash):
+            user.password_hash = hash_password(PASSWORD)
+            changed = True
+
+    if changed:
+        db.session.commit()
+    return changed
+
+
+def ensure_demo_team_assignments():
+    """Attach the demo coach/player to teams in already-seeded databases."""
+    coach = User.query.filter_by(email="ali@rallyriot.com").first()
+    player = User.query.filter_by(email="omar@rallyriot.com").first()
+    teams = Team.query.order_by(Team.id.asc()).all()
+    thunder = Team.query.filter_by(name="Thunder U16").first() or (teams[0] if teams else None)
+    storm = Team.query.filter_by(name="Storm Beginners").first() or (teams[1] if len(teams) > 1 else None)
+    changed = False
+
+    if coach and thunder and not TeamCoach.query.filter_by(
+        team_id=thunder.id,
+        coach_user_id=coach.id,
+    ).first():
+        db.session.add(TeamCoach(team_id=thunder.id, coach_user_id=coach.id))
+        changed = True
+
+    if coach and storm and not TeamCoach.query.filter_by(
+        team_id=storm.id,
+        coach_user_id=coach.id,
+    ).first():
+        db.session.add(TeamCoach(team_id=storm.id, coach_user_id=coach.id))
+        changed = True
+
+    if player and thunder and not TeamPlayer.query.filter_by(
+        team_id=thunder.id,
+        player_user_id=player.id,
+    ).first():
+        db.session.add(TeamPlayer(team_id=thunder.id, player_user_id=player.id))
+        changed = True
 
     if changed:
         db.session.commit()
@@ -79,7 +115,9 @@ def ensure_demo_accounts():
 def seed():
     """Populate the DB with rich demo data. Safe to call on an existing DB."""
     if User.query.first():
-        if ensure_demo_accounts():
+        accounts_changed = ensure_demo_accounts()
+        assignments_changed = ensure_demo_team_assignments()
+        if accounts_changed or assignments_changed:
             print("Demo accounts created or repaired.")
         print("Database already seeded - skipping.")
         return
@@ -88,12 +126,15 @@ def seed():
 
     # ══════════════════════════════════════════════════════════════
     # USERS
-    # Only admin + parents are pre-seeded.
-    # Coaches and players will be created LIVE during the demo.
+    # Loginable demo users for each role.
     # ══════════════════════════════════════════════════════════════
 
     admin = User(full_name="Mohammad Al-Admin", email="admin@rallyriot.com",
                  password_hash=hash_password(PASSWORD), role="admin")
+    coach_ali = User(full_name="Ali Hassan", email="ali@rallyriot.com",
+                     password_hash=hash_password(PASSWORD), role="coach")
+    player_omar = User(full_name="Omar Al-Rashid", email="omar@rallyriot.com",
+                       password_hash=hash_password(PASSWORD), role="player")
 
     parent_ahmad  = User(full_name="Ahmad Al-Rashid",  email="ahmad@rallyriot.com",
                          password_hash=hash_password(PASSWORD), role="parent", wallet_balance=500.00)
@@ -102,7 +143,7 @@ def seed():
     parent_nour   = User(full_name="Nour Mansour",     email="nour@rallyriot.com",
                          password_hash=hash_password(PASSWORD), role="parent", wallet_balance=50.00)
 
-    db.session.add_all([admin, parent_ahmad, parent_fatima, parent_nour])
+    db.session.add_all([admin, coach_ali, player_omar, parent_ahmad, parent_fatima, parent_nour])
     db.session.flush()
 
     # ══════════════════════════════════════════════════════════════
@@ -114,10 +155,16 @@ def seed():
     db.session.add_all([team_thunder, team_lightning, team_storm])
     db.session.flush()
 
+    # Assign the demo coach/player so those role dashboards have useful data.
+    db.session.add(TeamCoach(team_id=team_thunder.id, coach_user_id=coach_ali.id))
+    db.session.add(TeamCoach(team_id=team_storm.id, coach_user_id=coach_ali.id))
+    db.session.add(TeamPlayer(team_id=team_thunder.id, player_user_id=player_omar.id))
+    db.session.flush()
+
     # ══════════════════════════════════════════════════════════════
     # PLACEHOLDER PLAYERS for historical data
-    # These are internal DB records only — no login credentials.
-    # The admin will create real loginable players live during the demo.
+    # These are internal DB records only - no login credentials.
+    # The demo player account above is the loginable player.
     # ══════════════════════════════════════════════════════════════
     _ph = hash_password("disabled-no-login-$$")  # unusable password
     ph_omar  = User(full_name="Omar Al-Rashid (sample)",  email="omar.sample@rallyriot.internal",
@@ -516,15 +563,13 @@ def seed():
     print("  Password for all accounts: Password1!")
     print()
     print("  ADMIN  -> admin@rallyriot.com")
+    print("  COACH  -> ali@rallyriot.com")
+    print("  PLAYER -> omar@rallyriot.com")
     print()
-    print("  PARENTS (pre-seeded, can log in immediately):")
-    print("    ahmad@rallyriot.com   (children: Omar, Ziad — paid + pending invoice)")
-    print("    fatima@rallyriot.com  (child: Sara — installment plan)")
-    print("    nour@rallyriot.com    (child: Karim — overdue invoice)")
-    print()
-    print("  COACHES / PLAYERS: create live during the demo via Admin > Users")
-    print("    Suggested demo coach:  coach@rallyriot.com / Password1!")
-    print("    Suggested demo player: player@rallyriot.com / Password1!")
+    print("  PARENTS:")
+    print("    ahmad@rallyriot.com   (children: Omar, Ziad - paid + pending invoice)")
+    print("    fatima@rallyriot.com  (child: Sara - installment plan)")
+    print("    nour@rallyriot.com    (child: Karim - overdue invoice)")
 
 
 if __name__ == "__main__":

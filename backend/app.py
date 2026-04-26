@@ -6,6 +6,7 @@ import logging.handlers
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import text
 
 from config import Config
 from extensions import db
@@ -46,6 +47,36 @@ def configure_logging():
     })
 
 
+def run_startup_migrations():
+    """Apply small SQLite migrations that db.create_all() cannot handle."""
+    changed = False
+
+    def table_columns(table_name):
+        return {
+            row[1]
+            for row in db.session.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+        }
+
+    if "wallet_balance" not in table_columns("users"):
+        db.session.execute(text("ALTER TABLE users ADD COLUMN wallet_balance FLOAT NOT NULL DEFAULT 0.0"))
+        changed = True
+
+    if "priority_level" not in table_columns("teams"):
+        db.session.execute(text("ALTER TABLE teams ADD COLUMN priority_level INTEGER NOT NULL DEFAULT 1"))
+        changed = True
+
+    if "recurring_rule_id" not in table_columns("events"):
+        db.session.execute(text("ALTER TABLE events ADD COLUMN recurring_rule_id INTEGER"))
+        changed = True
+
+    if "absence_reason" not in table_columns("attendance_records"):
+        db.session.execute(text("ALTER TABLE attendance_records ADD COLUMN absence_reason TEXT"))
+        changed = True
+
+    if changed:
+        db.session.commit()
+
+
 def create_app(config_class=Config):
     configure_logging()
     logger = logging.getLogger(__name__)
@@ -71,6 +102,7 @@ def create_app(config_class=Config):
             dbapi_conn.execute("PRAGMA synchronous=NORMAL")
             dbapi_conn.execute("PRAGMA busy_timeout=5000")
         db.create_all()
+        run_startup_migrations()
         os.makedirs(app.config.get("UPLOAD_DIR", "./uploads"), exist_ok=True)
         from seed import seed
         seed()
