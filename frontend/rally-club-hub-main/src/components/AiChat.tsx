@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Bot, X, Send, Loader2, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Bot, X, Send, Loader2, ChevronDown, GripHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,10 +13,16 @@ interface Message {
 }
 
 const ROLE_HINTS: Record<string, string> = {
-  coach: 'Try: "Book Court A for team practice tomorrow at 3pm for 2 hours"',
-  parent: 'Try: "Show my child\'s schedule" or "What\'s my balance?"',
-  admin: 'Try: "Book a court" or "Check the balance for a parent"',
+  coach:  'Try: "Who\'s on my team?" or "Book Court A tomorrow at 3pm for 2 hours" or "Who RSVP\'d to Friday\'s match?"',
+  parent: 'Try: "What\'s my child\'s schedule?" or "What\'s my balance?" or "Any new announcements?"',
+  player: 'Try: "What are my upcoming events?" or "RSVP yes to tomorrow\'s practice" or "What\'s my attendance rate?"',
+  admin:  'Try: "List all coaches" or "Show pending registrations" or "Check club-wide balance"',
 };
+
+const MIN_W = 320;
+const MIN_H = 400;
+const MAX_W = 900;
+const MAX_H = Math.round(window.innerHeight * 0.9);
 
 export function AiChat() {
   const { role } = useAuth();
@@ -27,7 +33,32 @@ export function AiChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Listen for sidebar "AI Assistant" button event
+  // Resizable state
+  const [size, setSize] = useState({ w: 480, h: 620 });
+  const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startW: size.w, startH: size.h };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dw = dragRef.current.startX - ev.clientX;
+      const dh = dragRef.current.startY - ev.clientY;
+      setSize({
+        w: Math.min(MAX_W, Math.max(MIN_W, dragRef.current.startW + dw)),
+        h: Math.min(MAX_H, Math.max(MIN_H, dragRef.current.startH + dh)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [size]);
+
   useEffect(() => {
     const handler = () => setOpen(true);
     window.addEventListener("rally:open-ai-chat", handler);
@@ -40,8 +71,7 @@ export function AiChat() {
     }
   }, [messages, open]);
 
-  // Only show for coach, parent, admin
-  if (!role || !["coach", "parent", "admin"].includes(role)) return null;
+  if (!role || !["coach", "parent", "admin", "player"].includes(role)) return null;
 
   async function send() {
     const text = input.trim();
@@ -91,9 +121,21 @@ export function AiChat() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 flex flex-col w-[360px] max-h-[520px] rounded-2xl border border-orange-500/20 bg-background shadow-2xl shadow-orange-900/20 overflow-hidden">
+        <div
+          className="fixed bottom-20 right-6 z-50 flex flex-col rounded-2xl border border-orange-500/20 bg-background shadow-2xl shadow-orange-900/20 overflow-hidden"
+          style={{ width: size.w, height: size.h }}
+        >
+          {/* Resize handle — drag from top-left corner */}
+          <div
+            onMouseDown={onMouseDown}
+            className="absolute top-0 left-0 w-5 h-5 cursor-nw-resize z-10 flex items-center justify-center opacity-30 hover:opacity-70 transition-opacity"
+            title="Drag to resize"
+          >
+            <GripHorizontal className="h-3 w-3 text-orange-400 rotate-45" />
+          </div>
+
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500/10 to-yellow-500/5 border-b border-orange-500/20">
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500/10 to-yellow-500/5 border-b border-orange-500/20 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center">
                 <Bot className="h-4 w-4 text-black" />
@@ -112,7 +154,7 @@ export function AiChat() {
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 px-4 py-3 space-y-3 min-h-0">
+          <ScrollArea className="flex-1 px-4 py-3 min-h-0">
             {messages.length === 0 && (
               <div className="text-center py-8 space-y-2">
                 <Bot className="h-10 w-10 text-orange-400 mx-auto" />
@@ -166,14 +208,14 @@ export function AiChat() {
           </ScrollArea>
 
           {/* Input */}
-          <div className="border-t border-orange-500/20 p-3 flex gap-2 items-end">
+          <div className="border-t border-orange-500/20 p-3 flex gap-2 items-end flex-shrink-0">
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask RallyBot anything…"
-              className="resize-none min-h-[40px] max-h-[120px] text-sm border-orange-500/20 focus-visible:ring-orange-500/30"
+              className="resize-none min-h-[40px] max-h-[160px] text-sm border-orange-500/20 focus-visible:ring-orange-500/30"
               rows={1}
               disabled={loading}
             />
