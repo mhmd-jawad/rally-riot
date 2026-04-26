@@ -92,7 +92,8 @@ def create_app(config_class=Config):
         return response
 
     # ── Background scheduler for event reminders ────────────────
-    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    is_testing = app.config.get("TESTING", False)
+    if not is_testing and (not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
         def run_reminders():
             with app.app_context():
                 from services import ReminderService
