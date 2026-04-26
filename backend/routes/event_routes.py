@@ -83,7 +83,7 @@ def create_event():
         end_time=end,
     )
     if conflict:
-        return api_response.conflict(conflict)
+        return api_response.conflict(conflict["message"], conflict)
 
     event = Event(
         team_id=data["team_id"],
@@ -132,7 +132,7 @@ def update_event(event_id):
             exclude_event_id=event.id,
         )
         if conflict:
-            return api_response.conflict(conflict)
+            return api_response.conflict(conflict["message"], conflict)
 
     # Detect schedule change for notifications
     schedule_changed = (
@@ -188,7 +188,9 @@ def delete_event(event_id):
 def list_events():
     team_id = request.args.get("team_id", type=int)
     page = request.args.get("page", type=int)
-    per_page = request.args.get("per_page", 20, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+    upcoming_only = request.args.get("upcoming", "false").lower() == "true"
+    limit = request.args.get("limit", type=int)
 
     visible_team_ids = _visible_team_ids()
     if visible_team_ids is not None and team_id and team_id not in visible_team_ids:
@@ -201,6 +203,8 @@ def list_events():
         query = query.filter(Event.team_id.in_(visible_team_ids))
     if team_id:
         query = query.filter_by(team_id=team_id)
+    if upcoming_only:
+        query = query.filter(Event.start_time >= datetime.utcnow())
     query = query.order_by(Event.start_time.asc())
 
     if page:
@@ -210,7 +214,10 @@ def list_events():
             "pagination": meta,
         })
 
-    events = query.all()
+    if limit:
+        events = query.limit(limit).all()
+    else:
+        events = query.all()
     return api_response.success([e.to_dict(include_relations=True) for e in events])
 
 
@@ -254,6 +261,33 @@ def my_calendar():
 
     events = Event.query.filter(Event.team_id.in_(team_ids)).order_by(Event.start_time.asc()).all()
     return api_response.success([e.to_dict(include_relations=True) for e in events])
+
+
+@event_bp.route("/courts", methods=["GET"])
+@authenticate
+def list_courts():
+    """Return all distinct court names, optionally filtered by available time window."""
+    start_str = request.args.get("start")
+    end_str = request.args.get("end")
+
+    all_courts = [row[0] for row in db.session.query(Event.court).distinct().order_by(Event.court).all()]
+
+    if start_str and end_str:
+        try:
+            start = _parse_dt(start_str)
+            end = _parse_dt(end_str)
+        except Exception:
+            return api_response.bad_request("Invalid start or end time format. Use ISO 8601.")
+        booked = {
+            row[0] for row in
+            db.session.query(Event.court).filter(
+                Event.start_time < end, Event.end_time > start
+            ).distinct().all()
+        }
+        available = [c for c in all_courts if c not in booked]
+        return api_response.success({"all": all_courts, "available": available, "booked": list(booked)})
+
+    return api_response.success({"all": all_courts})
 
 
 @event_bp.route("/recurring", methods=["POST"])

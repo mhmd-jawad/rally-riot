@@ -28,6 +28,7 @@ export default function CoachAnnouncements() {
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ["my-announcements"],
     queryFn: async () => (await api.announcements.list()).data || [],
+    staleTime: 60_000,
   });
 
   const createMutation = useMutation({

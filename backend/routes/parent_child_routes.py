@@ -49,7 +49,6 @@ def link_child():
 @authenticate
 @authorize("parent", "admin")
 def get_children():
-    # Admin sees all links; parent sees only their own
     if g.user["role"] == "admin":
         links = ParentChildLink.query.all()
     else:
@@ -65,3 +64,17 @@ def get_children():
             d["parent"] = {"id": parent.id, "full_name": parent.full_name, "email": parent.email}
         result.append(d)
     return api_response.success(result)
+
+
+@parent_child_bp.route("/<int:link_id>", methods=["DELETE"])
+@authenticate
+@authorize("parent", "admin")
+def unlink_child(link_id):
+    link = ParentChildLink.query.get(link_id)
+    if not link:
+        return api_response.not_found("Link not found.")
+    if g.user["role"] == "parent" and link.parent_user_id != g.user["id"]:
+        return api_response.forbidden("You can only remove your own links.")
+    db.session.delete(link)
+    db.session.commit()
+    return api_response.success(None, "Parent-child link removed.")

@@ -27,9 +27,6 @@ export function AiChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Only show for coach, parent, admin
-  if (!role || !["coach", "parent", "admin"].includes(role)) return null;
-
   // Listen for sidebar "AI Assistant" button event
   useEffect(() => {
     const handler = () => setOpen(true);
@@ -42,6 +39,9 @@ export function AiChat() {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, open]);
+
+  // Only show for coach, parent, admin
+  if (!role || !["coach", "parent", "admin"].includes(role)) return null;
 
   async function send() {
     const text = input.trim();

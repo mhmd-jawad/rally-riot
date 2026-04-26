@@ -20,6 +20,7 @@ export default function AdminAttendance() {
       const params = teamFilter !== "all" ? { team_id: Number(teamFilter) } : undefined;
       return (await api.attendance.summary(params)).data || [];
     },
+    staleTime: 60_000,
   });
 
   const rateColor = (rate: number) => {

@@ -40,14 +40,16 @@ def create_team():
 @team_bp.route("/", methods=["GET"])
 @authenticate
 def list_teams():
-    teams = Team.query.all()
-    return api_response.success([t.to_dict(include_members=True) for t in teams])
+    include_members = request.args.get("members", "false").lower() == "true"
+    teams = Team.query.order_by(Team.priority_level.desc(), Team.name.asc()).all()
+    return api_response.success([t.to_dict(include_members=include_members) for t in teams])
 
 
 @team_bp.route("/my", methods=["GET"])
 @authenticate
 def my_teams():
-    """Return only the teams the authenticated coach is assigned to."""
+    """Return only the teams the authenticated user is assigned to."""
+    include_members = request.args.get("members", "false").lower() == "true"
     user_id = g.user["id"]
     role = g.user["role"]
     if role == "coach":
@@ -59,9 +61,8 @@ def my_teams():
         team_ids = [a.team_id for a in assignments]
         teams = Team.query.filter(Team.id.in_(team_ids)).all()
     else:
-        # admin sees all
         teams = Team.query.all()
-    return api_response.success([t.to_dict(include_members=True) for t in teams])
+    return api_response.success([t.to_dict(include_members=include_members) for t in teams])
 
 
 @team_bp.route("/<int:team_id>", methods=["GET"])

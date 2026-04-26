@@ -20,8 +20,8 @@ export default function AdminTeams() {
   const [selectedUserId, setSelectedUserId] = useState("");
 
   const { data: teams = [], isLoading } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => (await api.teams.list()).data || [],
+    queryKey: ["teams-with-members"],
+    queryFn: async () => (await api.teams.list(true)).data || [],
   });
 
   const { data: users = [] } = useQuery({
@@ -32,7 +32,7 @@ export default function AdminTeams() {
   const createMutation = useMutation({
     mutationFn: () => api.teams.create({ ...newTeam, priority_level: Number(newTeam.priority_level) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams-with-members"] });
       toast({ title: "Team created" });
       setTeamOpen(false);
       setNewTeam({ name: "", age_group: "", skill_level: "", priority_level: "1" });
@@ -43,7 +43,7 @@ export default function AdminTeams() {
   const priorityMutation = useMutation({
     mutationFn: ({ teamId, level }: { teamId: number; level: number }) => api.teams.setPriority(teamId, level),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams-with-members"] });
       toast({ title: "Priority updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -52,7 +52,7 @@ export default function AdminTeams() {
   const assignCoachMutation = useMutation({
     mutationFn: ({ teamId, userId }: { teamId: number; userId: number }) => api.teams.assignCoach(teamId, userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams-with-members"] });
       toast({ title: "Coach assigned" });
       setAssignOpen(null);
     },
@@ -62,7 +62,7 @@ export default function AdminTeams() {
   const assignPlayerMutation = useMutation({
     mutationFn: ({ teamId, userId }: { teamId: number; userId: number }) => api.teams.assignPlayer(teamId, userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams-with-members"] });
       toast({ title: "Player assigned" });
       setAssignOpen(null);
     },

@@ -20,14 +20,18 @@ export default function ParentSchedule() {
     queryFn: async () => (await api.parentChild.list()).data || [],
   });
 
+  // Auto-select first child as soon as children load
+  const effectiveChild = selectedChild || (children.length > 0 ? String((children[0] as any).child_user_id) : "");
+
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["child-schedule", selectedChild],
+    queryKey: ["child-schedule", effectiveChild],
     queryFn: async () => {
-      if (selectedChild) {
-        return (await api.events.childSchedule(Number(selectedChild))).data || [];
+      if (effectiveChild) {
+        return (await api.events.childSchedule(Number(effectiveChild))).data || [];
       }
-      return (await api.events.myCalendar()).data || [];
+      return [];
     },
+    enabled: children.length > 0,
   });
 
   const rsvpMutation = useMutation({
@@ -43,7 +47,7 @@ export default function ParentSchedule() {
   const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
   const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
 
-  const childId = selectedChild ? Number(selectedChild) : null;
+  const childId = effectiveChild ? Number(effectiveChild) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -53,11 +57,10 @@ export default function ParentSchedule() {
           <p className="text-muted-foreground">View and manage your child's schedule</p>
         </div>
         {children.length > 1 && (
-          <Select value={selectedChild} onValueChange={setSelectedChild}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All children" /></SelectTrigger>
+          <Select value={effectiveChild} onValueChange={setSelectedChild}>
+            <SelectTrigger className="w-48"><SelectValue placeholder="Select child" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All children</SelectItem>
-              {children.map((c: any) => (
+              {(children as any[]).map((c: any) => (
                 <SelectItem key={c.child_user_id} value={String(c.child_user_id)}>
                   {c.child?.full_name || `Child #${c.child_user_id}`}
                 </SelectItem>

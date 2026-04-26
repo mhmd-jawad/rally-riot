@@ -10,7 +10,7 @@ def auth_header(token):
 
 def admin_login(client):
     """Login using the seeded admin account."""
-    return login(client, "admin@rallyriot.com", "Password1!")
+    return login(client, "admin@rallyriot.com", "Demo1234!")
 
 
 def register(client, email, password, full_name, role):

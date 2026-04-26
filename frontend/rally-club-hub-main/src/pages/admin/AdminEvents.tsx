@@ -51,6 +51,7 @@ export default function AdminEvents() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["all-events"],
     queryFn: async () => (await api.events.list()).data || [],
+    staleTime: 10_000,
   });
 
   const resetForm = () => {

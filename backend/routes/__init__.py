@@ -11,6 +11,7 @@ from routes.announcement_routes import announcement_bp
 from routes.notification_routes import notification_bp
 from routes.ai_routes import ai_bp
 from routes.monitoring_routes import monitoring_bp
+from routes.community_routes import community_bp
 
 
 def register_blueprints(app):
@@ -27,3 +28,4 @@ def register_blueprints(app):
     app.register_blueprint(notification_bp, url_prefix="/api/notifications")
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
     app.register_blueprint(monitoring_bp, url_prefix="/api/monitoring")
+    app.register_blueprint(community_bp, url_prefix="/api/community")

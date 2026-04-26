@@ -66,8 +66,10 @@ export const users = {
 
 // ── Teams ───────────────────────────────────────────────────
 export const teams = {
-  list: () => request<{ success: boolean; data: any[] }>("/teams/"),
-  myTeams: () => request<{ success: boolean; data: any[] }>("/teams/my"),
+  list: (includeMembers = false) =>
+    request<{ success: boolean; data: any[] }>(`/teams/${includeMembers ? "?members=true" : ""}`),
+  myTeams: (includeMembers = false) =>
+    request<{ success: boolean; data: any[] }>(`/teams/my${includeMembers ? "?members=true" : ""}`),
   get: (id: number) => request<{ success: boolean; data: any }>(`/teams/${id}`),
   create: (data: { name: string; age_group?: string; skill_level?: string }) =>
     request("/teams/", { method: "POST", body: JSON.stringify(data) }),
@@ -99,13 +101,19 @@ export const parentChild = {
         ...(parentUserId ? { parent_user_id: parentUserId } : {}),
       }),
     }),
+  unlink: (linkId: number) =>
+    request(`/parent-child/${linkId}`, { method: "DELETE" }),
 };
 
 // ── Events ──────────────────────────────────────────────────
 export const events = {
-  list: (teamId?: number) => {
-    const qs = teamId ? `?team_id=${teamId}` : "";
-    return request<{ success: boolean; data: any[] }>(`/events/${qs}`);
+  list: (params?: { teamId?: number; upcoming?: boolean; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.teamId) qs.set("team_id", String(params.teamId));
+    if (params?.upcoming) qs.set("upcoming", "true");
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return request<{ success: boolean; data: any[] }>(`/events/${q ? "?" + q : ""}`);
   },
   get: (id: number) => request<{ success: boolean; data: any }>(`/events/${id}`),
   create: (data: any) =>
@@ -117,6 +125,10 @@ export const events = {
   myCalendar: () => request<{ success: boolean; data: any[] }>("/events/my/calendar"),
   childSchedule: (childId: number) =>
     request<{ success: boolean; data: any[] }>(`/events/child/${childId}/schedule`),
+  courts: (start?: string, end?: string) => {
+    const qs = start && end ? `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}` : "";
+    return request<{ success: boolean; data: any }>(`/events/courts${qs}`);
+  },
   createRecurring: (data: {
     team_id: number; event_type: string; title: string; court: string;
     start_date: string; end_date: string; days_of_week: number[];
@@ -222,6 +234,36 @@ export const notifications = {
     request("/notifications/read-all", { method: "PATCH" }),
 };
 
+// ── Community Hub ───────────────────────────────────────────
+export const community = {
+  listPosts: (params?: { team_id?: number; category?: string }) => {
+    const qs = params ? "?" + new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
+    ).toString() : "";
+    return request<{ success: boolean; data: any[] }>(`/community/posts${qs}`);
+  },
+  getPost: (id: number) =>
+    request<{ success: boolean; data: any }>(`/community/posts/${id}`),
+  createPost: (data: {
+    team_id: number; title: string; body: string; category: string;
+    poll?: { question: string; options: string[] };
+  }) => request("/community/posts", { method: "POST", body: JSON.stringify(data) }),
+  deletePost: (id: number) =>
+    request(`/community/posts/${id}`, { method: "DELETE" }),
+  togglePin: (id: number) =>
+    request(`/community/posts/${id}/pin`, { method: "PATCH" }),
+  createReply: (postId: number, body: string) =>
+    request(`/community/posts/${postId}/replies`, {
+      method: "POST", body: JSON.stringify({ body }),
+    }),
+  deleteReply: (replyId: number) =>
+    request(`/community/replies/${replyId}`, { method: "DELETE" }),
+  vote: (pollId: number, optionId: number) =>
+    request(`/community/polls/${pollId}/vote`, {
+      method: "POST", body: JSON.stringify({ option_id: optionId }),
+    }),
+};
+
 // ── AI Chat ─────────────────────────────────────────────────
 export const ai = {
   chat: (messages: Array<{ role: string; content: string }>) =>
@@ -231,5 +273,5 @@ export const ai = {
     }),
 };
 
-const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications, ai };
+const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications, community, ai };
 export default api;
