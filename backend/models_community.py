@@ -10,7 +10,7 @@ class CommunityPost(db.Model):
         db.Index("idx_post_author", "author_user_id"),
     )
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True)
     author_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     title = db.Column(db.String, nullable=False)
     body = db.Column(db.Text, nullable=False)
@@ -30,7 +30,7 @@ class CommunityPost(db.Model):
         d = {
             "id": self.id,
             "team_id": self.team_id,
-            "team": {"id": self.team.id, "name": self.team.name} if self.team else None,
+            "team": {"id": self.team.id, "name": self.team.name} if self.team_id and self.team else None,
             "author_user_id": self.author_user_id,
             "author": {"id": self.author.id, "full_name": self.author.full_name,
                        "role": self.author.role} if self.author else None,

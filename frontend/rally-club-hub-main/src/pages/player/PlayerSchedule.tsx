@@ -5,17 +5,35 @@ import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Calendar, MapPin, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+
+const ABSENCE_REASON_OPTIONS = [
+  "Illness / injury",
+  "Family commitment",
+  "School / exam",
+  "Travel",
+  "Work",
+  "Personal reasons",
+  "Other",
+];
 
 export default function PlayerSchedule() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [teamFilter, setTeamFilter] = useState("all");
+
+  // Absence reason dialog state
+  const [absenceDialog, setAbsenceDialog] = useState<{ eventId: number } | null>(null);
+  const [absenceReason, setAbsenceReason] = useState("");
+  const [absenceOther, setAbsenceOther] = useState("");
 
   const { data: teams = [] } = useQuery({
     queryKey: ["my-teams"],
@@ -32,8 +50,8 @@ export default function PlayerSchedule() {
     : (allEvents as any[]).filter((e: any) => String(e.team_id) === teamFilter);
 
   const rsvpMutation = useMutation({
-    mutationFn: ({ eventId, status }: { eventId: number; status: string }) =>
-      api.rsvps.upsert({ event_id: eventId, player_user_id: user!.id, status }),
+    mutationFn: ({ eventId, status, absence_reason }: { eventId: number; status: string; absence_reason?: string }) =>
+      api.rsvps.upsert({ event_id: eventId, player_user_id: user!.id, status, absence_reason } as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-calendar"] });
       toast({ title: "RSVP updated" });
@@ -41,8 +59,29 @@ export default function PlayerSchedule() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
-  const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
+  const handleCantGo = (eventId: number) => {
+    setAbsenceReason("");
+    setAbsenceOther("");
+    setAbsenceDialog({ eventId });
+  };
+
+  const submitCantGo = () => {
+    if (!absenceDialog) return;
+    if (!absenceReason) {
+      toast({ title: "Reason required", description: "Please select a reason for your absence.", variant: "destructive" });
+      return;
+    }
+    const finalReason = absenceReason === "Other" ? (absenceOther.trim() || "Other") : absenceReason;
+    if (absenceReason === "Other" && !absenceOther.trim()) {
+      toast({ title: "Please specify", description: "Please describe your reason.", variant: "destructive" });
+      return;
+    }
+    rsvpMutation.mutate({ eventId: absenceDialog.eventId, status: "not_attending", absence_reason: finalReason });
+    setAbsenceDialog(null);
+  };
+
+  const upcomingEvents = (events as any[]).filter((e: any) => parseUTC(e.start_time) >= new Date());
+  const pastEvents = (events as any[]).filter((e: any) => parseUTC(e.start_time) < new Date());
 
   const typeColor: Record<string, string> = {
     practice: "bg-blue-100 text-blue-800",
@@ -104,9 +143,18 @@ export default function PlayerSchedule() {
                       {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
                     </div>
                     <div className="flex gap-2 shrink-0 ml-4">
-                      <Button size="sm" variant="outline" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "attending" })}>Going</Button>
-                      <Button size="sm" variant="ghost" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "maybe" })}>Maybe</Button>
-                      <Button size="sm" variant="ghost" onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "not_attending" })}>Can't go</Button>
+                      <Button size="sm" variant="outline"
+                        onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "attending" })}>
+                        Going
+                      </Button>
+                      <Button size="sm" variant="ghost"
+                        onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "maybe" })}>
+                        Maybe
+                      </Button>
+                      <Button size="sm" variant="ghost"
+                        onClick={() => handleCantGo(event.id)}>
+                        Can't go
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -135,6 +183,42 @@ export default function PlayerSchedule() {
           </div>
         </div>
       )}
+
+      {/* Absence reason dialog */}
+      <Dialog open={!!absenceDialog} onOpenChange={v => { if (!v) setAbsenceDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Why can't you make it?</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Reason <span className="text-destructive">*</span></Label>
+              <Select value={absenceReason} onValueChange={setAbsenceReason}>
+                <SelectTrigger className={!absenceReason ? "border-muted-foreground/40" : ""}>
+                  <SelectValue placeholder="Select a reason…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ABSENCE_REASON_OPTIONS.map(r => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {absenceReason === "Other" && (
+              <div>
+                <Label>Please specify <span className="text-destructive">*</span></Label>
+                <Input
+                  placeholder="Describe your reason…"
+                  value={absenceOther}
+                  onChange={e => setAbsenceOther(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAbsenceDialog(null)}>Cancel</Button>
+            <Button onClick={submitCantGo} disabled={rsvpMutation.isPending}>Submit</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

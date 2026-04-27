@@ -12,8 +12,14 @@ export default function AdminDashboard() {
   const { toast } = useToast();
 
   const reminderMutation = useMutation({
-    mutationFn: () => api.notifications.sendReminders(),
+    mutationFn: () => api.notifications.sendReminders(72, true),
     onSuccess: (res: any) => toast({ title: "Reminders sent", description: res.message }),
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const paymentReminderMutation = useMutation({
+    mutationFn: () => api.notifications.sendPaymentReminders(),
+    onSuccess: (res: any) => toast({ title: "Payment reminders sent", description: res.message }),
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -49,11 +55,18 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Overview of your club operations</p>
+          <p className="text-xs text-muted-foreground mt-1">Automated reminders are enabled: event reminders hourly and payment reminders daily.</p>
         </div>
-        <Button variant="outline" onClick={() => reminderMutation.mutate()} disabled={reminderMutation.isPending}>
-          <Bell className="w-4 h-4 mr-2" />
-          {reminderMutation.isPending ? "Sending..." : "Send Event Reminders"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => reminderMutation.mutate()} disabled={reminderMutation.isPending}>
+            <Bell className="w-4 h-4 mr-2" />
+            {reminderMutation.isPending ? "Sending..." : "Send Event Reminders"}
+          </Button>
+          <Button variant="outline" onClick={() => paymentReminderMutation.mutate()} disabled={paymentReminderMutation.isPending}>
+            <DollarSign className="w-4 h-4 mr-2" />
+            {paymentReminderMutation.isPending ? "Sending..." : "Send Payment Reminders"}
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Users" value={stats?.totalUsers ?? 0} icon={Users} />

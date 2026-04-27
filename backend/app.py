@@ -73,6 +73,39 @@ def run_startup_migrations():
         db.session.execute(text("ALTER TABLE attendance_records ADD COLUMN absence_reason TEXT"))
         changed = True
 
+    if "absence_reason" not in table_columns("rsvps"):
+        db.session.execute(text("ALTER TABLE rsvps ADD COLUMN absence_reason TEXT"))
+        changed = True
+
+    if "target_user_id" not in table_columns("discounts"):
+        db.session.execute(text("ALTER TABLE discounts ADD COLUMN target_user_id INTEGER"))
+        changed = True
+
+    # blocked_dates table is created by db.create_all() on first run — no ALTER needed
+
+    # Make community_posts.team_id nullable (allow global posts with no team)
+    # SQLite: check if the column is defined NOT NULL and rebuild the table if so
+    community_cols = db.session.execute(text("PRAGMA table_info(community_posts)")).fetchall()
+    team_id_col = next((c for c in community_cols if c[1] == "team_id"), None)
+    if team_id_col and team_id_col[3] == 1:  # notnull flag == 1 means NOT NULL
+        db.session.execute(text("""
+            CREATE TABLE IF NOT EXISTS community_posts_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER REFERENCES teams(id),
+                author_user_id INTEGER NOT NULL REFERENCES users(id),
+                title VARCHAR NOT NULL,
+                body TEXT NOT NULL,
+                category VARCHAR DEFAULT 'general',
+                is_pinned BOOLEAN DEFAULT 0,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        db.session.execute(text("INSERT INTO community_posts_new SELECT * FROM community_posts"))
+        db.session.execute(text("DROP TABLE community_posts"))
+        db.session.execute(text("ALTER TABLE community_posts_new RENAME TO community_posts"))
+        changed = True
+
     if changed:
         db.session.commit()
 
@@ -123,16 +156,24 @@ def create_app(config_class=Config):
         record_request(response.status_code)
         return response
 
-    # ── Background scheduler for event reminders ────────────────
+    # ── Background scheduler for automated reminders ─────────────
     is_testing = app.config.get("TESTING", False)
     if not is_testing and (not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-        def run_reminders():
+        def run_event_reminders():
             with app.app_context():
                 from services import ReminderService
-                ReminderService.send_upcoming_reminders(hours_ahead=24)
+                # Automated event reminders: hourly, non-forced (deduped).
+                ReminderService.send_upcoming_reminders(hours_ahead=72)
+
+        def run_payment_reminders():
+            with app.app_context():
+                from services import ReminderService
+                # Automated payment reminders: daily, deduped by invoice.
+                ReminderService.send_payment_reminders()
 
         scheduler = BackgroundScheduler()
-        scheduler.add_job(run_reminders, "interval", hours=1, id="event_reminders")
+        scheduler.add_job(run_event_reminders, "interval", hours=1, id="event_reminders")
+        scheduler.add_job(run_payment_reminders, "interval", hours=24, id="payment_reminders")
         scheduler.start()
 
     # ── Health check ────────────────────────────────────────────

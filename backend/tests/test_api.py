@@ -868,3 +868,123 @@ class TestNotifications:
         resp = client.get("/api/notifications/", headers=auth_header(token))
         assert resp.status_code == 200
         assert len(resp.get_json()["data"]) == 0
+
+    def test_send_reminders_invalid_hours(self, client, db):
+        admin_token, _, _, _ = self._setup(client)
+        resp = client.post(
+            "/api/notifications/send-reminders",
+            json={"hours_ahead": "abc"},
+            headers=auth_header(admin_token),
+        )
+        assert resp.status_code == 400
+
+
+class TestBlockedDatesAndDiscounts:
+    def test_single_event_rejected_on_blocked_date(self, client, db):
+        admin_token, _ = make_user(client, "blkadmin@test.com", "Block Admin", "admin")
+        coach_token, coach = make_user(client, "blkcoach@test.com", "Block Coach", "coach")
+
+        team_resp = client.post("/api/teams/", json={"name": "Blocked Team"}, headers=auth_header(admin_token))
+        team_id = team_resp.get_json()["data"]["id"]
+        client.post(
+            f"/api/teams/{team_id}/coaches",
+            json={"coach_user_id": coach["id"]},
+            headers=auth_header(admin_token),
+        )
+
+        client.post(
+            "/api/blocked-dates/",
+            json={
+                "label": "Final Exams",
+                "block_type": "exam",
+                "start_date": "2026-05-10",
+                "end_date": "2026-05-20",
+            },
+            headers=auth_header(admin_token),
+        )
+
+        resp = client.post(
+            "/api/events/",
+            json={
+                "team_id": team_id,
+                "title": "Blocked Practice",
+                "event_type": "practice",
+                "court": "Court A",
+                "start_time": "2026-05-12T10:00:00Z",
+                "end_time": "2026-05-12T11:00:00Z",
+            },
+            headers=auth_header(coach_token),
+        )
+        assert resp.status_code == 409
+
+    def test_targeted_discount_applies_only_to_selected_player(self, client, db):
+        admin_token, admin_user = make_user(client, "discadmin@test.com", "Disc Admin", "admin")
+        _, parent = make_user(client, "discparent@test.com", "Disc Parent", "parent")
+        _, player_a = make_user(client, "discplayera@test.com", "Disc Player A", "player")
+        _, player_b = make_user(client, "discplayerb@test.com", "Disc Player B", "player")
+
+        team_resp = client.post("/api/teams/", json={"name": "Discount Team"}, headers=auth_header(admin_token))
+        team_id = team_resp.get_json()["data"]["id"]
+        client.post(f"/api/teams/{team_id}/players", json={"player_user_id": player_a["id"]}, headers=auth_header(admin_token))
+        client.post(f"/api/teams/{team_id}/players", json={"player_user_id": player_b["id"]}, headers=auth_header(admin_token))
+
+        client.post(
+            "/api/parent-child/",
+            json={"parent_user_id": parent["id"], "child_user_id": player_a["id"]},
+            headers=auth_header(admin_token),
+        )
+        client.post(
+            "/api/parent-child/",
+            json={"parent_user_id": parent["id"], "child_user_id": player_b["id"]},
+            headers=auth_header(admin_token),
+        )
+
+        form_resp = client.post(
+            "/api/registrations/forms",
+            json={
+                "title": "Discount Form",
+                "team_id": team_id,
+                "fee": 200,
+                "created_by_user_id": admin_user["id"],
+            },
+            headers=auth_header(admin_token),
+        )
+        form_id = form_resp.get_json()["data"]["id"]
+
+        disc_resp = client.post(
+            "/api/invoices/discounts",
+            json={
+                "form_id": form_id,
+                "label": "Targeted Aid",
+                "discount_type": "percentage",
+                "value": 50,
+                "target_user_id": player_a["id"],
+            },
+            headers=auth_header(admin_token),
+        )
+        discount_id = disc_resp.get_json()["data"]["id"]
+
+        reg_a = client.post(
+            "/api/registrations/",
+            json={
+                "form_id": form_id,
+                "player_user_id": player_a["id"],
+                "parent_user_id": parent["id"],
+                "discount_id": discount_id,
+            },
+            headers=auth_header(admin_token),
+        )
+        assert reg_a.status_code == 201
+        assert reg_a.get_json()["data"]["invoice"]["amount"] == 100
+
+        reg_b = client.post(
+            "/api/registrations/",
+            json={
+                "form_id": form_id,
+                "player_user_id": player_b["id"],
+                "parent_user_id": parent["id"],
+            },
+            headers=auth_header(admin_token),
+        )
+        assert reg_b.status_code == 201
+        assert reg_b.get_json()["data"]["invoice"]["amount"] == 200

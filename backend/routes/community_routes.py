@@ -44,8 +44,16 @@ def list_posts():
     query = CommunityPost.query
     if visible is not None:
         if not visible:
-            return api_response.success([])
-        query = query.filter(CommunityPost.team_id.in_(visible))
+            # Still show global posts (no team) even if user has no teams
+            query = query.filter(CommunityPost.team_id.is_(None))
+        else:
+            # Show team posts the user belongs to OR global posts (team_id is NULL)
+            query = query.filter(
+                db.or_(
+                    CommunityPost.team_id.in_(visible),
+                    CommunityPost.team_id.is_(None),
+                )
+            )
     if team_id:
         query = query.filter_by(team_id=team_id)
     if category and category in VALID_CATEGORIES:
@@ -68,7 +76,8 @@ def get_post(post_id):
     if not post:
         return api_response.not_found("Post not found.")
     visible = _visible_team_ids()
-    if visible is not None and post.team_id not in visible:
+    # Global posts (no team) are visible to all authenticated users
+    if post.team_id is not None and visible is not None and post.team_id not in visible:
         return api_response.forbidden("You cannot view this post.")
     return api_response.success(
         post.to_dict(include_replies=True, include_poll=True, current_user_id=g.user["id"])
@@ -81,8 +90,6 @@ def get_post(post_id):
 def create_post():
     data = request.get_json(silent=True) or {}
     errors = []
-    if not data.get("team_id"):
-        errors.append({"field": "team_id", "message": "team_id is required."})
     if not data.get("title", "").strip():
         errors.append({"field": "title", "message": "title is required."})
     if not data.get("body", "").strip():
@@ -94,9 +101,13 @@ def create_post():
     if errors:
         return api_response.bad_request("Validation failed.", errors)
 
-    visible = _visible_team_ids()
-    if visible is not None and data["team_id"] not in visible:
-        return api_response.forbidden("You are not a member of this team.")
+    team_id = data.get("team_id") or None
+
+    # If a specific team is chosen, verify the user can access it
+    if team_id:
+        visible = _visible_team_ids()
+        if visible is not None and team_id not in visible:
+            return api_response.forbidden("You are not a member of this team.")
 
     # Poll posts must include poll data
     if category == "poll":
@@ -108,12 +119,12 @@ def create_post():
             return api_response.bad_request("Polls require at least 2 options.")
 
     post = CommunityPost(
-        team_id=data["team_id"],
+        team_id=team_id,
         author_user_id=g.user["id"],
         title=data["title"].strip(),
         body=data["body"].strip(),
         category=category,
-        is_pinned=False,
+        is_pinned=(g.user["role"] == "admin"),
     )
     db.session.add(post)
     db.session.flush()
@@ -176,7 +187,7 @@ def create_reply(post_id):
         return api_response.not_found("Post not found.")
 
     visible = _visible_team_ids()
-    if visible is not None and post.team_id not in visible:
+    if post.team_id is not None and visible is not None and post.team_id not in visible:
         return api_response.forbidden("You are not a member of this team.")
 
     data = request.get_json(silent=True) or {}
@@ -221,7 +232,7 @@ def vote(poll_id):
 
     post = CommunityPost.query.get(poll.post_id)
     visible = _visible_team_ids()
-    if visible is not None and post.team_id not in visible:
+    if post.team_id is not None and visible is not None and post.team_id not in visible:
         return api_response.forbidden("You are not a member of this team.")
 
     data = request.get_json(silent=True) or {}

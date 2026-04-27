@@ -28,6 +28,7 @@ import ParentPayments from "./pages/parent/ParentPayments";
 import PlayerDashboard from "./pages/player/PlayerDashboard";
 import PlayerSchedule from "./pages/player/PlayerSchedule";
 import PlayerPayments from "./pages/player/PlayerPayments";
+import PlayerRegistration from "./pages/player/PlayerRegistration";
 import CalendarPage from "./pages/shared/CalendarPage";
 import CourtCalendar from "./pages/shared/CourtCalendar";
 import CommunityHub from "./pages/community/CommunityHub";
@@ -93,6 +94,7 @@ const App = () => (
               <Route path="/player/schedule" element={<PlayerSchedule />} />
               <Route path="/player/calendar" element={<CalendarPage />} />
               <Route path="/player/payments" element={<PlayerPayments />} />
+              <Route path="/player/registration" element={<PlayerRegistration />} />
               <Route path="/player/courts" element={<CourtCalendar />} />
               <Route path="/player/community" element={<CommunityHub />} />
             </Route>

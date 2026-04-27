@@ -12,6 +12,7 @@ from routes.notification_routes import notification_bp
 from routes.ai_routes import ai_bp
 from routes.monitoring_routes import monitoring_bp
 from routes.community_routes import community_bp
+from routes.blocked_dates_routes import blocked_dates_bp
 
 
 def register_blueprints(app):
@@ -29,3 +30,4 @@ def register_blueprints(app):
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
     app.register_blueprint(monitoring_bp, url_prefix="/api/monitoring")
     app.register_blueprint(community_bp, url_prefix="/api/community")
+    app.register_blueprint(blocked_dates_bp, url_prefix="/api/blocked-dates")

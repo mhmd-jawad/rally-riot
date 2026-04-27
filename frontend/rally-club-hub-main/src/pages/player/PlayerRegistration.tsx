@@ -27,9 +27,10 @@ export default function PlayerRegistration() {
 
   const submitMutation = useMutation({
     mutationFn: () =>
-      api.registrations.submit({
+      (api.registrations.submit as any)({
         form_id: Number(selectedForm),
         player_user_id: user!.id,
+        parent_user_id: user!.id,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-registrations"] });

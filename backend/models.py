@@ -337,22 +337,28 @@ class Discount(db.Model):
     __tablename__ = "discounts"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     form_id = db.Column(db.Integer, db.ForeignKey("registration_forms.id"), nullable=False)
+    target_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     label = db.Column(db.String, nullable=False)
     discount_type = db.Column(db.String, nullable=False)  # percentage, fixed
     value = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     form = db.relationship("RegistrationForm", foreign_keys=[form_id])
+    target_user = db.relationship("User", foreign_keys=[target_user_id])
 
     def to_dict(self):
-        return {
+        data = {
             "id": self.id,
             "form_id": self.form_id,
+            "target_user_id": self.target_user_id,
             "label": self.label,
             "discount_type": self.discount_type,
             "value": self.value,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+        if self.target_user:
+            data["target_user"] = self.target_user.to_public()
+        return data
 
 
 class InstallmentPlan(db.Model):
@@ -405,6 +411,7 @@ class RSVP(db.Model):
     player_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     responded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     status = db.Column(db.String, nullable=False)  # attending, not_attending, maybe
+    absence_reason = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     event = db.relationship("Event", foreign_keys=[event_id])
@@ -418,6 +425,7 @@ class RSVP(db.Model):
             "player_user_id": self.player_user_id,
             "responded_by_user_id": self.responded_by_user_id,
             "status": self.status,
+            "absence_reason": self.absence_reason,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
@@ -480,6 +488,29 @@ class Announcement(db.Model):
         if self.team:
             d["team"] = {"id": self.team.id, "name": self.team.name}
         return d
+
+
+class BlockedDate(db.Model):
+    """Admin-defined holidays and exam periods that recurring events skip."""
+    __tablename__ = "blocked_dates"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    label = db.Column(db.String, nullable=False)          # e.g. "Christmas Break"
+    block_type = db.Column(db.String, nullable=False, default="holiday")  # holiday | exam
+    start_date = db.Column(db.String, nullable=False)     # YYYY-MM-DD
+    end_date = db.Column(db.String, nullable=False)       # YYYY-MM-DD (inclusive)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "label": self.label,
+            "block_type": self.block_type,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "created_by_user_id": self.created_by_user_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class Notification(db.Model):

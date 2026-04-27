@@ -1,10 +1,11 @@
 """Invoice routes."""
 from datetime import datetime
 from flask import Blueprint, g, request
+from sqlalchemy import or_
 
 import api_response
 from auth import authenticate, authorize
-from models import Invoice, Discount, InstallmentPlan, InstallmentPayment, RegistrationForm, User
+from models import Invoice, Discount, InstallmentPlan, InstallmentPayment, RegistrationForm, User, ParentChildLink
 from extensions import db
 
 invoice_bp = Blueprint("invoices", __name__)
@@ -131,8 +132,19 @@ def create_discount():
     if not form:
         return api_response.not_found("Registration form not found.")
 
+    target_user_id = data.get("target_user_id")
+    if target_user_id is not None:
+        try:
+            target_user_id = int(target_user_id)
+        except (TypeError, ValueError):
+            return api_response.bad_request("target_user_id must be an integer.")
+        target_user = User.query.get(target_user_id)
+        if not target_user or target_user.role != "player":
+            return api_response.bad_request("target_user_id must belong to an existing player.")
+
     discount = Discount(
         form_id=data["form_id"],
+        target_user_id=target_user_id,
         label=data["label"].strip(),
         discount_type=data["discount_type"],
         value=float(data["value"]),
@@ -146,7 +158,19 @@ def create_discount():
 @authenticate
 @authorize("admin", "parent")
 def list_discounts(form_id):
-    discounts = Discount.query.filter_by(form_id=form_id).all()
+    query = Discount.query.filter_by(form_id=form_id)
+    if g.user["role"] == "parent":
+        child_ids = [
+            row.child_user_id
+            for row in ParentChildLink.query.filter_by(parent_user_id=g.user["id"]).all()
+        ]
+        query = query.filter(
+            or_(
+                Discount.target_user_id.is_(None),
+                Discount.target_user_id.in_(child_ids or [-1]),
+            )
+        )
+    discounts = query.all()
     return api_response.success([d.to_dict() for d in discounts])
 
 

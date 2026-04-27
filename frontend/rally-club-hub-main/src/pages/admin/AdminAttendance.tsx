@@ -4,10 +4,14 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function AdminAttendance() {
   const [teamFilter, setTeamFilter] = useState("all");
+  const [expandedPlayer, setExpandedPlayer] = useState<number | null>(null);
+  const [reasonsDialog, setReasonsDialog] = useState<any>(null);
 
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
@@ -41,7 +45,7 @@ export default function AdminAttendance() {
           <SelectTrigger className="w-56"><SelectValue placeholder="Filter by team" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Teams</SelectItem>
-            {teams.map((t: any) => (
+            {(teams as any[]).map((t: any) => (
               <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
             ))}
           </SelectContent>
@@ -57,7 +61,7 @@ export default function AdminAttendance() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="animate-pulse h-32 bg-muted rounded-b-xl" />
-          ) : rows.length === 0 ? (
+          ) : (rows as any[]).length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No attendance records found</p>
           ) : (
             <div className="overflow-x-auto">
@@ -70,10 +74,11 @@ export default function AdminAttendance() {
                     <th className="p-4">Absent</th>
                     <th className="p-4">Total Events</th>
                     <th className="p-4">Attendance Rate</th>
+                    <th className="p-4">Absence Reasons</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r: any) => (
+                  {(rows as any[]).map((r: any) => (
                     <tr key={r.player_id} className="border-b last:border-0 hover:bg-muted/50">
                       <td className="p-4 font-medium text-sm">{r.player_name}</td>
                       <td className="p-4 text-sm text-muted-foreground">{r.team_name}</td>
@@ -83,15 +88,27 @@ export default function AdminAttendance() {
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <div className="w-24 bg-muted rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full"
-                              style={{ width: `${r.attendance_rate}%` }}
-                            />
+                            <div className="bg-primary h-2 rounded-full" style={{ width: `${r.attendance_rate}%` }} />
                           </div>
                           <Badge variant="secondary" className={rateColor(r.attendance_rate)}>
                             {r.attendance_rate}%
                           </Badge>
                         </div>
+                      </td>
+                      <td className="p-4">
+                        {r.absence_reasons?.length > 0 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => setReasonsDialog(r)}
+                          >
+                            View {r.absence_reasons.length} reason{r.absence_reasons.length !== 1 ? "s" : ""}
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -101,6 +118,26 @@ export default function AdminAttendance() {
           )}
         </CardContent>
       </Card>
+
+      {/* Absence reasons dialog */}
+      <Dialog open={!!reasonsDialog} onOpenChange={v => { if (!v) setReasonsDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Absence Reasons — {reasonsDialog?.player_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {(reasonsDialog?.absence_reasons || []).map((ar: any, i: number) => (
+              <div key={i} className="flex items-start justify-between rounded border px-3 py-2 text-sm">
+                <div>
+                  <p className="font-medium">{ar.event_title}</p>
+                  <p className="text-xs text-muted-foreground">{ar.date}</p>
+                </div>
+                <Badge variant="secondary" className="ml-2 shrink-0">{ar.reason}</Badge>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -5,9 +5,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from sqlalchemy import or_
 
 from extensions import db
-from models import Notification, Event, Invoice, TeamPlayer, ParentChildLink, Discount, InstallmentPlan, InstallmentPayment, User
+from models import Notification, Event, Invoice, TeamPlayer, TeamCoach, ParentChildLink, Discount, InstallmentPlan, InstallmentPayment, User
 
 logger = logging.getLogger(__name__)
 
@@ -126,24 +127,37 @@ class OverlapService:
     def check_conflicts(court, team_id, coach_user_id, start_time, end_time, exclude_event_id=None):
         """Return a dict with conflict details or None if no conflict.
 
-        Dict shape: {"type": "court"|"team"|"coach", "message": str, "conflicting_event_id": int}
-        Callers that only need the message can call .get("message").
+        Dict shape:
+          {
+            "type": "court"|"team"|"coach",
+            "message": str,
+            "conflicting_event_id": int,
+            "conflicting_team_id": int,          # only for court conflicts
+            "conflicting_team_priority": int,     # only for court conflicts
+          }
         """
+        from models import Team as _Team
         base = Event.query.filter(Event.start_time < end_time, Event.end_time > start_time)
         if exclude_event_id:
             base = base.filter(Event.id != exclude_event_id)
 
-        court_conflict = base.filter(Event.court == court).first()
+        # Court conflict: only flag events from a DIFFERENT team occupying this court.
+        # Same-team events on the same court are caught by the team conflict check below.
+        court_conflict = base.filter(Event.court == court, Event.team_id != team_id).first()
         if court_conflict:
+            conflicting_team = _Team.query.get(court_conflict.team_id)
             return {
                 "type": "court",
                 "message": (
                     f"Court '{court}' is already booked "
                     f"{court_conflict.start_time.strftime('%b %d %H:%M')}–"
                     f"{court_conflict.end_time.strftime('%H:%M')} "
-                    f"by event '{court_conflict.title}' (#{court_conflict.id})."
+                    f"by '{court_conflict.title}' (team: {conflicting_team.name if conflicting_team else '?'}, "
+                    f"priority {conflicting_team.priority_level if conflicting_team else '?'})."
                 ),
                 "conflicting_event_id": court_conflict.id,
+                "conflicting_team_id": court_conflict.team_id,
+                "conflicting_team_priority": conflicting_team.priority_level if conflicting_team else 1,
             }
 
         team_conflict = base.filter(Event.team_id == team_id).first()
@@ -172,6 +186,34 @@ class OverlapService:
 
         return None
 
+    @staticmethod
+    def displace_event(conflicting_event, reason_title, reason_message):
+        """Delete a lower-priority event and notify its team's coaches and players."""
+        team_id = conflicting_event.team_id
+
+        # Notify all coaches of the displaced team
+        coach_ids = [tc.coach_user_id for tc in TeamCoach.query.filter_by(team_id=team_id).all()]
+        if coach_ids:
+            NotificationService.notify_many(
+                coach_ids,
+                "event_displaced",
+                reason_message,
+                title=reason_title,
+            )
+
+        # Notify all players of the displaced team
+        player_ids = [tp.player_user_id for tp in TeamPlayer.query.filter_by(team_id=team_id).all()]
+        if player_ids:
+            NotificationService.notify_many(
+                player_ids,
+                "event_displaced",
+                reason_message,
+                title=reason_title,
+            )
+
+        db.session.delete(conflicting_event)
+        db.session.flush()
+
 
 def paginate(query, page: int = 1, per_page: int = 20):
     """Return (items, meta) where meta contains pagination info.
@@ -195,70 +237,92 @@ class ReminderService:
     """Send event reminder notifications to players and parents."""
 
     @staticmethod
-    def send_upcoming_reminders(hours_ahead=24):
+    def send_upcoming_reminders(hours_ahead=72, return_details=False, force_send=False):
         """
         Find events starting within the next `hours_ahead` hours and notify
         all players on the team plus their linked parents. Skips events that
-        already have a reminder notification sent within the last hour to avoid
-        duplicates if the job runs frequently.
+        already have a reminder notification sent within the last 20 hours to
+        avoid duplicates when the job runs hourly.
         """
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.utcnow()
         window_start = now
         window_end = now + timedelta(hours=hours_ahead)
 
         upcoming = Event.query.filter(
             Event.start_time >= window_start,
             Event.start_time <= window_end,
+            Event.event_type.in_(["practice", "match"]),
         ).all()
 
         notified_count = 0
+        already_reminded_count = 0
+        no_recipients_count = 0
+        failed_count = 0
         for event in upcoming:
-            # Check if a reminder was already sent for this event recently
-            already_sent = Notification.query.filter(
-                Notification.type == "event_reminder",
-                Notification.title.like(f"%{event.id}%"),
-                Notification.created_at >= now - timedelta(hours=1),
-            ).first()
-            if already_sent:
-                continue
+            try:
+                # Use exact title match to avoid false positives from partial ID matches
+                exact_title = f"[Event #{event.id}] Upcoming Event Reminder"
+                if not force_send:
+                    already_sent = Notification.query.filter(
+                        Notification.type == "event_reminder",
+                        Notification.title == exact_title,
+                        Notification.created_at >= now - timedelta(hours=20),
+                    ).first()
+                    if already_sent:
+                        already_reminded_count += 1
+                        continue
 
-            players = TeamPlayer.query.filter_by(team_id=event.team_id).all()
-            player_ids = [p.player_user_id for p in players]
+                players = TeamPlayer.query.filter_by(team_id=event.team_id).all()
+                player_ids = [p.player_user_id for p in players]
 
-            if not player_ids:
-                continue
+                if not player_ids:
+                    no_recipients_count += 1
+                    continue
 
-            start_str = event.start_time.strftime("%b %d at %I:%M %p")
-            message = f"Reminder: '{event.title}' is scheduled for {start_str} at {event.court}."
-            title = f"[Event #{event.id}] Upcoming Event Reminder"
+                start_str = event.start_time.strftime("%b %d at %I:%M %p")
+                message = f"Reminder: '{event.title}' is scheduled for {start_str} at {event.court}."
+                title = f"[Event #{event.id}] Upcoming Event Reminder"
 
-            NotificationService.notify_many(
-                player_ids,
-                "event_reminder",
-                message,
-                title=title,
-                send_email=True,
-            )
-
-            # Also notify parents of those players
-            parent_ids = set()
-            for pid in player_ids:
-                links = ParentChildLink.query.filter_by(child_user_id=pid).all()
-                for link in links:
-                    parent_ids.add(link.parent_user_id)
-
-            if parent_ids:
                 NotificationService.notify_many(
-                    list(parent_ids),
+                    player_ids,
                     "event_reminder",
                     message,
                     title=title,
                     send_email=True,
                 )
 
-            db.session.commit()
-            notified_count += 1
+                # Also notify parents of those players
+                parent_ids = set()
+                for pid in player_ids:
+                    links = ParentChildLink.query.filter_by(child_user_id=pid).all()
+                    for link in links:
+                        parent_ids.add(link.parent_user_id)
 
+                if parent_ids:
+                    NotificationService.notify_many(
+                        list(parent_ids),
+                        "event_reminder",
+                        message,
+                        title=title,
+                        send_email=True,
+                    )
+
+                notified_count += 1
+            except Exception as exc:
+                logger.exception("Failed to process reminder for event %s: %s", event.id, exc)
+                db.session.rollback()
+                failed_count += 1
+
+        db.session.commit()
+        if return_details:
+            return {
+                "upcoming_events": len(upcoming),
+                "newly_sent": notified_count,
+                "already_reminded": already_reminded_count,
+                "no_recipients": no_recipients_count,
+                "failed": failed_count,
+                "force_send": force_send,
+            }
         return notified_count
 
     @staticmethod
@@ -314,12 +378,27 @@ class InvoiceService:
     """Generate invoices from registrations, applying discounts and installment plans."""
 
     @staticmethod
-    def generate_from_registration(registration, form, num_installments=1):
-        """Create an invoice for a registration, applying any form discounts and splitting into installments."""
+    def generate_from_registration(registration, form, num_installments=1, discount_id=None):
+        """Create an invoice for a registration, applying eligible discounts and splitting into installments."""
         base_fee = float(form.fee or 0.0)
 
-        # Apply all discounts defined on this form
-        discounts = Discount.query.filter_by(form_id=form.id).all()
+        if discount_id is not None:
+            selected_discount = Discount.query.filter_by(id=discount_id, form_id=form.id).first()
+            if not selected_discount:
+                raise ValueError("Selected discount was not found for this form.")
+            if selected_discount.target_user_id and selected_discount.target_user_id != registration.player_user_id:
+                raise ValueError("Selected discount is not assigned to this player.")
+            discounts = [selected_discount]
+        else:
+            # Global discounts apply to everyone, targeted discounts apply only to the selected player.
+            discounts = Discount.query.filter(
+                Discount.form_id == form.id,
+                or_(
+                    Discount.target_user_id.is_(None),
+                    Discount.target_user_id == registration.player_user_id,
+                ),
+            ).all()
+
         total_discount = 0.0
         for d in discounts:
             if d.discount_type == "percentage":

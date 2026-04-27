@@ -16,13 +16,30 @@ import { Plus, FileText, ClipboardList, Tag, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
+// Predefined discount presets: { label, discount_type, value }
+const DISCOUNT_PRESETS = [
+  { label: "Sibling discount",      discount_type: "percentage", value: 10 },
+  { label: "Early-bird registration", discount_type: "percentage", value: 15 },
+  { label: "Financial aid",         discount_type: "percentage", value: 25 },
+  { label: "Full scholarship",      discount_type: "percentage", value: 100 },
+  { label: "Referral bonus",        discount_type: "fixed",      value: 20 },
+  { label: "Staff / coach family",  discount_type: "percentage", value: 50 },
+  { label: "Multi-season loyalty",  discount_type: "percentage", value: 10 },
+  { label: "Custom",                discount_type: "percentage", value: 0 },
+];
+
 function DiscountManager({ form }: { form: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState("");
-  const [discountType, setDiscountType] = useState("percentage");
-  const [value, setValue] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
+  const [customType, setCustomType] = useState("percentage");
+  const [customValue, setCustomValue] = useState("");
+  const [targetUserId, setTargetUserId] = useState("all");
+
+  const preset = DISCOUNT_PRESETS.find(p => p.label === selectedPreset);
+  const isCustom = selectedPreset === "Custom";
 
   const { data: discounts = [] } = useQuery({
     queryKey: ["discounts", form.id],
@@ -30,32 +47,43 @@ function DiscountManager({ form }: { form: any }) {
     enabled: open,
   });
 
+  const { data: teamDetails } = useQuery({
+    queryKey: ["team", form.team_id],
+    queryFn: async () => (await api.teams.get(form.team_id)).data,
+    enabled: open && !!form.team_id,
+  });
+  const teamPlayers = (teamDetails?.players || []) as any[];
+
   const createMutation = useMutation({
-    mutationFn: () =>
-      api.invoices.createDiscount({
+    mutationFn: () => {
+      const label = isCustom ? customLabel.trim() : selectedPreset;
+      const discountType = isCustom ? customType : (preset?.discount_type || "percentage");
+      const value = isCustom ? parseFloat(customValue) : (preset?.value || 0);
+      return api.invoices.createDiscount({
         form_id: form.id,
-        label: label.trim(),
+        label,
         discount_type: discountType,
-        value: parseFloat(value),
-      }),
+        value,
+        ...(targetUserId !== "all" ? { target_user_id: Number(targetUserId) } : {}),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discounts", form.id] });
       toast({ title: "Discount added" });
-      setLabel("");
-      setValue("");
-      setDiscountType("percentage");
+      setSelectedPreset("");
+      setCustomLabel(""); setCustomValue(""); setCustomType("percentage");
+      setTargetUserId("all");
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.invoices.deleteDiscount(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["discounts", form.id] });
-      toast({ title: "Discount removed" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["discounts", form.id] }); toast({ title: "Discount removed" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const canAdd = selectedPreset && (isCustom ? (customLabel.trim() && customValue) : true);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -73,18 +101,18 @@ function DiscountManager({ form }: { form: any }) {
             <div className="space-y-2">
               {discounts.map((d: any) => (
                 <div key={d.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                  <span className="font-medium">{d.label}</span>
+                  <div>
+                    <span className="font-medium">{d.label}</span>
+                    <p className="text-xs text-muted-foreground">
+                      Applies to: {d.target_user?.full_name || "All players"}
+                    </p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">
                       {d.discount_type === "percentage" ? `${d.value}%` : `$${d.value.toFixed(2)}`}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-destructive"
-                      onClick={() => deleteMutation.mutate(d.id)}
-                      disabled={deleteMutation.isPending}
-                    >
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                      onClick={() => deleteMutation.mutate(d.id)} disabled={deleteMutation.isPending}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
                   </div>
@@ -96,32 +124,66 @@ function DiscountManager({ form }: { form: any }) {
           <div className="border-t pt-4 space-y-3">
             <p className="text-sm font-medium">Add Discount</p>
             <div>
-              <Label className="text-xs">Label</Label>
-              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Sibling discount" />
+              <Label className="text-xs">Reason / Preset</Label>
+              <Select value={selectedPreset} onValueChange={setSelectedPreset}>
+                <SelectTrigger><SelectValue placeholder="Select discount reason…" /></SelectTrigger>
+                <SelectContent>
+                  {DISCOUNT_PRESETS.map(p => (
+                    <SelectItem key={p.label} value={p.label}>
+                      <span>{p.label}</span>
+                      {p.value > 0 && (
+                        <span className="ml-2 text-muted-foreground text-xs">
+                          ({p.discount_type === "percentage" ? `${p.value}% off` : `$${p.value} off`})
+                        </span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Type</Label>
-                <Select value={discountType} onValueChange={setDiscountType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentage (%)</SelectItem>
-                    <SelectItem value="fixed">Fixed ($)</SelectItem>
-                  </SelectContent>
-                </Select>
+            {selectedPreset && !isCustom && preset && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded px-3 py-2">
+                Will apply: <strong>{preset.discount_type === "percentage" ? `${preset.value}%` : `$${preset.value}`} off</strong>
+              </p>
+            )}
+            {isCustom && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Label</Label>
+                  <Input value={customLabel} onChange={e => setCustomLabel(e.target.value)} placeholder="Describe the discount" />
+                </div>
+                <div>
+                  <Label className="text-xs">Type</Label>
+                  <Select value={customType} onValueChange={setCustomType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      <SelectItem value="fixed">Fixed ($)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Value</Label>
+                  <Input type="number" min="0" value={customValue} onChange={e => setCustomValue(e.target.value)} placeholder={customType === "percentage" ? "e.g. 10" : "e.g. 25"} />
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">Value</Label>
-                <Input type="number" min="0" value={value} onChange={e => setValue(e.target.value)} placeholder={discountType === "percentage" ? "e.g. 10" : "e.g. 25"} />
-              </div>
+            )}
+            <div>
+              <Label className="text-xs">Apply To</Label>
+              <Select value={targetUserId} onValueChange={setTargetUserId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All players in this program</SelectItem>
+                  {teamPlayers.map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending || !label.trim() || !value}
-          >
+          <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !canAdd}>
             Add Discount
           </Button>
         </DialogFooter>
@@ -208,8 +270,38 @@ export default function AdminRegistrations() {
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Season</Label><Input placeholder="e.g. Fall 2025" value={newForm.season} onChange={e => setNewForm(p => ({ ...p, season: e.target.value }))} /></div>
-                <div><Label>Fee ($)</Label><Input type="number" value={newForm.fee} onChange={e => setNewForm(p => ({ ...p, fee: e.target.value }))} /></div>
+                <div>
+                  <Label>Season</Label>
+                  <Select value={newForm.season} onValueChange={v => setNewForm(p => ({ ...p, season: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select season" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Fall 2025">Fall 2025</SelectItem>
+                      <SelectItem value="Winter 2025">Winter 2025</SelectItem>
+                      <SelectItem value="Spring 2026">Spring 2026</SelectItem>
+                      <SelectItem value="Summer 2026">Summer 2026</SelectItem>
+                      <SelectItem value="Fall 2026">Fall 2026</SelectItem>
+                      <SelectItem value="Winter 2026">Winter 2026</SelectItem>
+                      <SelectItem value="Year-Round">Year-Round</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Fee ($)</Label>
+                  <Select value={newForm.fee} onValueChange={v => setNewForm(p => ({ ...p, fee: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select fee" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Free</SelectItem>
+                      <SelectItem value="50">$50</SelectItem>
+                      <SelectItem value="100">$100</SelectItem>
+                      <SelectItem value="150">$150</SelectItem>
+                      <SelectItem value="200">$200</SelectItem>
+                      <SelectItem value="250">$250</SelectItem>
+                      <SelectItem value="300">$300</SelectItem>
+                      <SelectItem value="400">$400</SelectItem>
+                      <SelectItem value="500">$500</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={newForm.requires_waiver} onCheckedChange={v => setNewForm(p => ({ ...p, requires_waiver: v }))} />

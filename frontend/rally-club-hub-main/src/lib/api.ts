@@ -205,7 +205,7 @@ export const registrations = {
     const qs = formId ? `?form_id=${formId}` : "";
     return request<{ success: boolean; data: any[] }>(`/registrations/${qs}`);
   },
-  submit: (data: { form_id: number; player_user_id: number; parent_user_id?: number }) =>
+  submit: (data: { form_id: number; player_user_id: number; parent_user_id?: number; num_installments?: number; discount_id?: number }) =>
     request("/registrations/", { method: "POST", body: JSON.stringify(data) }),
   updateStatus: (regId: number, status: string) =>
     request(`/registrations/${regId}/status`, {
@@ -238,7 +238,7 @@ export const invoices = {
     request<{ success: boolean; data: any }>(`/invoices/${invoiceId}/installments`),
   payInstallment: (paymentId: number) =>
     request(`/invoices/installments/${paymentId}/pay`, { method: "PATCH" }),
-  createDiscount: (data: { form_id: number; label: string; discount_type: string; value: number }) =>
+  createDiscount: (data: { form_id: number; label: string; discount_type: string; value: number; target_user_id?: number }) =>
     request("/invoices/discounts", { method: "POST", body: JSON.stringify(data) }),
   listDiscounts: (formId: number) =>
     request<{ success: boolean; data: any[] }>(`/invoices/discounts/${formId}`),
@@ -250,6 +250,8 @@ export const invoices = {
 export const rsvps = {
   upsert: (data: { event_id: number; player_user_id: number; status: string }) =>
     request("/rsvps/", { method: "POST", body: JSON.stringify(data) }),
+  coachUpsert: (data: { event_id: number; player_user_id: number; status: string }) =>
+    request("/rsvps/coach", { method: "POST", body: JSON.stringify(data) }),
   forEvent: (eventId: number) =>
     request<{ success: boolean; data: any[] }>(`/rsvps/event/${eventId}`),
 };
@@ -281,7 +283,7 @@ export const announcements = {
 // ── Notifications ───────────────────────────────────────────
 export const notifications = {
   list: () => request<{ success: boolean; data: any[] }>("/notifications/"),
-  sendReminders: () => request<{ success: boolean; message: string }>("/notifications/send-reminders", { method: "POST" }),
+  sendReminders: (hoursAhead = 72, forceSend = false) => request<{ success: boolean; message: string }>("/notifications/send-reminders", { method: "POST", body: JSON.stringify({ hours_ahead: hoursAhead, force_send: forceSend }) }),
   sendPaymentReminders: () => request<{ success: boolean; data: { invoices_notified: number }; message: string }>("/notifications/send-payment-reminders", { method: "POST" }),
   markRead: (id: number) =>
     request(`/notifications/${id}/read`, { method: "PATCH" }),
@@ -328,5 +330,13 @@ export const ai = {
     }),
 };
 
-const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications, community, ai };
+// ── Blocked Dates ────────────────────────────────────────────
+export const blockedDates = {
+  list: () => request<{ success: boolean; data: any[] }>("/blocked-dates/"),
+  create: (data: { label: string; block_type: string; start_date: string; end_date: string }) =>
+    request("/blocked-dates/", { method: "POST", body: JSON.stringify(data) }),
+  delete: (id: number) => request(`/blocked-dates/${id}`, { method: "DELETE" }),
+};
+
+const api = { auth, users, teams, parentChild, events, registrations, invoices, rsvps, attendance, announcements, notifications, community, ai, blockedDates };
 export default api;

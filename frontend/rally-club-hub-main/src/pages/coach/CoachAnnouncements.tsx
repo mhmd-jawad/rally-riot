@@ -21,14 +21,14 @@ export default function CoachAnnouncements() {
   const [form, setForm] = useState({ title: "", message: "", team_id: "", priority: "normal" });
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["my-teams"],
+    queryKey: ["my-teams-announcements"],
     queryFn: async () => (await api.teams.myTeams()).data || [],
+    staleTime: 0,
   });
 
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ["my-announcements"],
     queryFn: async () => (await api.announcements.list()).data || [],
-    staleTime: 60_000,
   });
 
   const createMutation = useMutation({

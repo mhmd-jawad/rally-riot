@@ -47,6 +47,7 @@ const playerItems = [
   { title: "My Schedule", url: "/player/schedule", icon: Calendar },
   { title: "My Calendar", url: "/player/calendar", icon: CalendarDays },
   { title: "Court Calendar", url: "/player/courts", icon: MapPin },
+  { title: "Registration", url: "/player/registration", icon: FileText },
   { title: "Payments", url: "/player/payments", icon: CreditCard },
   { title: "Community Hub", url: "/player/community", icon: MessageSquare },
 ];

@@ -129,7 +129,7 @@ def update_form(form_id):
 # ── Registrations ─────────────────────────────────────────────
 @registration_bp.route("/", methods=["POST"])
 @authenticate
-@authorize("parent", "admin")
+@authorize("parent", "admin", "player")
 def submit_registration():
     data = request.get_json(silent=True) or {}
     errors = []
@@ -139,6 +139,15 @@ def submit_registration():
         errors.append({"field": "player_user_id", "message": "player_user_id is required."})
     if errors:
         return api_response.bad_request("Validation failed.", errors)
+
+    discount_id = data.get("discount_id")
+    if discount_id is not None:
+        try:
+            discount_id = int(discount_id)
+        except (TypeError, ValueError):
+            return api_response.bad_request("discount_id must be an integer.")
+        if g.user["role"] != "admin":
+            return api_response.forbidden("Only admins can explicitly choose a discount.")
 
     form = RegistrationForm.query.get(data["form_id"])
     if not form:
@@ -150,7 +159,12 @@ def submit_registration():
     if not player or player.role != "player":
         return api_response.bad_request("Player must be an existing user with the player role.")
 
-    if g.user["role"] == "parent":
+    if g.user["role"] == "player":
+        # Players self-register; parent_user_id is set to their own id as a placeholder
+        if player.id != g.user["id"]:
+            return api_response.forbidden("Players can only register themselves.")
+        parent_id = g.user["id"]
+    elif g.user["role"] == "parent":
         if data.get("parent_user_id") and data["parent_user_id"] != g.user["id"]:
             return api_response.forbidden("Parents can only submit registrations for themselves.")
         link = ParentChildLink.query.filter_by(
@@ -191,7 +205,16 @@ def submit_registration():
     invoice = None
     if form.fee and form.fee > 0:
         num_installments = max(1, int(data.get("num_installments", 1)))
-        invoice = InvoiceService.generate_from_registration(reg, form, num_installments=num_installments)
+        try:
+            invoice = InvoiceService.generate_from_registration(
+                reg,
+                form,
+                num_installments=num_installments,
+                discount_id=discount_id,
+            )
+        except ValueError as exc:
+            db.session.rollback()
+            return api_response.bad_request(str(exc))
 
     db.session.commit()
 
@@ -203,14 +226,15 @@ def submit_registration():
 
 @registration_bp.route("/", methods=["GET"])
 @authenticate
-@authorize("admin", "parent")
+@authorize("admin", "parent", "player")
 def list_registrations():
     form_id = request.args.get("form_id", type=int)
     query = Registration.query
     if form_id:
         query = query.filter_by(form_id=form_id)
-    # Parents only see their own registrations
-    if g.user["role"] == "parent":
+    if g.user["role"] == "player":
+        query = query.filter_by(player_user_id=g.user["id"])
+    elif g.user["role"] == "parent":
         query = query.filter_by(parent_user_id=g.user["id"])
     registrations = query.order_by(Registration.created_at.desc()).all()
     return api_response.success([r.to_dict(include_relations=True) for r in registrations])

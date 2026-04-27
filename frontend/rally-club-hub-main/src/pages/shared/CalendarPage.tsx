@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, MapPin, Clock, Calendar, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Clock, Calendar, Users, CalendarOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -29,6 +29,11 @@ const TYPE_BADGE: Record<string, string> = {
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const BLOCK_TYPE_BADGE: Record<string, string> = {
+  holiday: "bg-orange-100 text-orange-800",
+  exam: "bg-purple-100 text-purple-800",
+};
 
 export default function CalendarPage() {
   const { toast } = useToast();
@@ -71,6 +76,11 @@ export default function CalendarPage() {
     enabled: role !== "parent" || !!activeChildId,
   });
 
+  const { data: blockedDates = [] } = useQuery({
+    queryKey: ["blocked-dates"],
+    queryFn: async () => (await api.blockedDates.list()).data || [],
+  });
+
   const rsvpMutation = useMutation({
     mutationFn: ({ eventId, status, playerId }: { eventId: number; status: string; playerId?: number }) =>
       api.rsvps.upsert({ event_id: eventId, player_user_id: playerId ?? user!.id, status }),
@@ -99,7 +109,13 @@ export default function CalendarPage() {
       .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
   }
 
+  function blockedOnDay(day: Date) {
+    const dayIso = format(day, "yyyy-MM-dd");
+    return (blockedDates as any[]).filter((b: any) => dayIso >= b.start_date && dayIso <= b.end_date);
+  }
+
   const selectedDayEvents = eventsOnDay(selectedDay);
+  const selectedDayBlocks = blockedOnDay(selectedDay);
   const upcomingCount = events.filter((e: any) => parseUTC(e.start_time) >= new Date()).length;
 
   return (
@@ -183,6 +199,7 @@ export default function CalendarPage() {
                 const inMonth = isSameMonth(day, currentMonth);
                 const selected = isSameDay(day, selectedDay);
                 const today = isToday(day);
+                const blocked = blockedOnDay(day).length > 0;
                 const isLast = i === calDays.length - 1;
                 const isLastRow = i >= calDays.length - 7;
 
@@ -194,6 +211,7 @@ export default function CalendarPage() {
                       "min-h-[80px] p-1.5 text-left border-r border-b transition-colors",
                       "hover:bg-accent focus:outline-none",
                       !inMonth && "opacity-35",
+                      blocked && "bg-orange-50/70",
                       selected && "bg-accent ring-2 ring-inset ring-primary",
                       isLast && "border-r-0",
                       isLastRow && "border-b-0",
@@ -217,6 +235,9 @@ export default function CalendarPage() {
                       ))}
                       {dayEvents.length > 3 && (
                         <div className="text-[10px] text-muted-foreground pl-1">+{dayEvents.length - 3} more</div>
+                      )}
+                      {blocked && (
+                        <div className="text-[10px] text-orange-700 pl-1">Blocked</div>
                       )}
                     </div>
                   </button>
@@ -246,6 +267,19 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y">
+            {selectedDayBlocks.length > 0 && (
+              <div className="p-3 space-y-2 bg-orange-50/60">
+                <p className="text-xs font-medium flex items-center gap-1">
+                  <CalendarOff className="w-3 h-3" /> Reservations blocked on this date
+                </p>
+                {selectedDayBlocks.map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-2">
+                    <Badge variant="secondary" className={BLOCK_TYPE_BADGE[b.block_type] || ""}>{b.block_type}</Badge>
+                    <span className="text-xs text-muted-foreground">{b.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {selectedDayEvents.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm gap-2">
                 <Calendar className="w-8 h-8 opacity-30" />

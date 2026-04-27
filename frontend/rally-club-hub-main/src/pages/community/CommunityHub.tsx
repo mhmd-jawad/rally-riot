@@ -275,7 +275,7 @@ function NewPostDialog({ teams }: { teams: any[] }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
-    team_id: teams[0] ? String(teams[0].id) : "",
+    team_id: "",   // empty = global (no team)
     title: "", body: "", category: "general",
   });
   const [pollQuestion, setPollQuestion] = useState("");
@@ -284,11 +284,11 @@ function NewPostDialog({ teams }: { teams: any[] }) {
   const createMutation = useMutation({
     mutationFn: () => {
       const payload: any = {
-        team_id: Number(form.team_id),
         title: form.title.trim(),
         body: form.body.trim(),
         category: form.category,
       };
+      if (form.team_id) payload.team_id = Number(form.team_id);
       if (form.category === "poll") {
         payload.poll = {
           question: pollQuestion.trim(),
@@ -301,14 +301,14 @@ function NewPostDialog({ teams }: { teams: any[] }) {
       queryClient.invalidateQueries({ queryKey: ["community-posts"] });
       toast({ title: "Post created" });
       setOpen(false);
-      setForm({ team_id: teams[0] ? String(teams[0].id) : "", title: "", body: "", category: "general" });
+      setForm({ team_id: "", title: "", body: "", category: "general" });
       setPollQuestion("");
       setPollOptions(["", ""]);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const canSubmit = form.title.trim() && form.body.trim() && form.team_id &&
+  const canSubmit = form.title.trim() && form.body.trim() &&
     (form.category !== "poll" || (pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2));
 
   return (
@@ -321,10 +321,11 @@ function NewPostDialog({ teams }: { teams: any[] }) {
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Team</Label>
-              <Select value={form.team_id} onValueChange={v => setForm(p => ({ ...p, team_id: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Label>Team <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Select value={form.team_id} onValueChange={v => setForm(p => ({ ...p, team_id: v === "_global" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="All members (global)" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="_global">All members (global)</SelectItem>
                   {teams.map((t: any) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>

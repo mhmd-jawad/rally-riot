@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, ChevronLeft, ChevronRight, Clock, User, Trophy } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Clock, User, Trophy, CalendarOff } from "lucide-react";
 import {
   format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks,
   isToday, isSameDay, parseISO,
@@ -16,6 +16,11 @@ const typeColor: Record<string, string> = {
   match: "bg-green-100 text-green-800 border-green-200",
   tryout: "bg-purple-100 text-purple-800 border-purple-200",
   tournament: "bg-orange-100 text-orange-800 border-orange-200",
+};
+
+const blockTypeBadge: Record<string, string> = {
+  holiday: "bg-orange-100 text-orange-800",
+  exam: "bg-purple-100 text-purple-800",
 };
 
 export default function CourtCalendar() {
@@ -40,8 +45,15 @@ export default function CourtCalendar() {
     queryFn: async () => (await api.events.courts()).data,
   });
 
+  const { data: blockedDates = [] } = useQuery({
+    queryKey: ["blocked-dates"],
+    queryFn: async () => (await api.blockedDates.list()).data || [],
+  });
+
   const allEvents: any[] = eventsData as any[];
   const courts: string[] = (courtsData as any)?.all || [];
+  const selectedDayIso = format(selectedDay, "yyyy-MM-dd");
+  const selectedDayBlocks = (blockedDates as any[]).filter((b: any) => selectedDayIso >= b.start_date && selectedDayIso <= b.end_date);
 
   // Filter to selected day
   const dayEvents = allEvents.filter((e: any) =>
@@ -172,6 +184,23 @@ export default function CourtCalendar() {
             : <span className="text-sm font-normal text-muted-foreground ml-1">({filteredEvents.length} reservation{filteredEvents.length !== 1 ? "s" : ""})</span>
           }
         </h2>
+
+        {selectedDayBlocks.length > 0 && (
+          <Card className="mb-4 border-orange-300 bg-orange-50/60">
+            <CardContent className="py-3">
+              <p className="text-sm font-medium flex items-center gap-1">
+                <CalendarOff className="w-4 h-4" /> Reservations are disabled on this day
+              </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {selectedDayBlocks.map((b: any) => (
+                  <Badge key={b.id} variant="secondary" className={blockTypeBadge[b.block_type] || ""}>
+                    {b.label}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {eventsLoading ? (
           <div className="animate-pulse h-32 bg-muted rounded-xl" />

@@ -60,10 +60,13 @@ def upsert_rsvp():
     if not on_team:
         return api_response.bad_request("Player is not a member of this team.")
 
+    absence_reason = data.get("absence_reason") if data.get("status") == "not_attending" else None
+
     existing = RSVP.query.filter_by(event_id=data["event_id"], player_user_id=player_id).first()
     if existing:
         existing.status = data["status"]
         existing.responded_by_user_id = user_id
+        existing.absence_reason = absence_reason
         db.session.commit()
         return api_response.success(existing.to_dict(), "RSVP updated.")
     else:
@@ -72,10 +75,59 @@ def upsert_rsvp():
             player_user_id=player_id,
             responded_by_user_id=user_id,
             status=data["status"],
+            absence_reason=absence_reason,
         )
         db.session.add(rsvp)
         db.session.commit()
         return api_response.created(rsvp.to_dict(), "RSVP recorded.")
+
+
+@rsvp_bp.route("/coach", methods=["POST"])
+@authenticate
+@authorize("coach", "admin")
+def coach_upsert_rsvp():
+    """Coach assigns or removes a player from an event lineup."""
+    data = request.get_json(silent=True) or {}
+    errors = []
+    if not data.get("event_id"):
+        errors.append({"field": "event_id", "message": "Event ID is required."})
+    if not data.get("player_user_id"):
+        errors.append({"field": "player_user_id", "message": "Player user ID is required."})
+    if data.get("status") not in VALID_RSVP:
+        errors.append({"field": "status", "message": "Status must be attending, not_attending, or maybe."})
+    if errors:
+        return api_response.bad_request("Validation failed.", errors)
+
+    event = Event.query.get(data["event_id"])
+    if not event:
+        return api_response.not_found("Event not found.")
+
+    if g.user["role"] == "coach":
+        assignment = TeamCoach.query.filter_by(team_id=event.team_id, coach_user_id=g.user["id"]).first()
+        if not assignment:
+            return api_response.forbidden("You are not a coach for this team.")
+
+    player_id = data["player_user_id"]
+    on_team = TeamPlayer.query.filter_by(team_id=event.team_id, player_user_id=player_id).first()
+    if not on_team:
+        return api_response.bad_request("Player is not a member of this team.")
+
+    existing = RSVP.query.filter_by(event_id=data["event_id"], player_user_id=player_id).first()
+    if existing:
+        existing.status = data["status"]
+        existing.responded_by_user_id = g.user["id"]
+        db.session.commit()
+        return api_response.success(existing.to_dict(), "RSVP updated.")
+
+    rsvp = RSVP(
+        event_id=data["event_id"],
+        player_user_id=player_id,
+        responded_by_user_id=g.user["id"],
+        status=data["status"],
+    )
+    db.session.add(rsvp)
+    db.session.commit()
+    return api_response.created(rsvp.to_dict(), "RSVP recorded.")
 
 
 @rsvp_bp.route("/event/<int:event_id>", methods=["GET"])
@@ -195,12 +247,20 @@ def attendance_summary():
                 "present": 0,
                 "absent": 0,
                 "total": 0,
+                "absence_reasons": [],
             }
         player_stats[pid]["total"] += 1
         if rec.status == "present":
             player_stats[pid]["present"] += 1
         else:
             player_stats[pid]["absent"] += 1
+            if rec.absence_reason:
+                player_stats[pid]["absence_reasons"].append({
+                    "event_id": event.id,
+                    "event_title": event.title,
+                    "date": event.start_time.strftime("%Y-%m-%d") if event.start_time else None,
+                    "reason": rec.absence_reason,
+                })
 
     # Attach team names and attendance rate
     team_cache: dict = {}

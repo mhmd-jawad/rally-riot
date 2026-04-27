@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Repeat, RefreshCw, Edit } from "lucide-react";
+import { Plus, Trash2, Repeat, RefreshCw, Edit, CalendarOff, GraduationCap, Palmtree } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -22,6 +22,11 @@ const typeColor: Record<string, string> = {
   match: "bg-green-100 text-green-800",
   tryout: "bg-purple-100 text-purple-800",
   tournament: "bg-orange-100 text-orange-800",
+};
+
+const blockTypeColor: Record<string, string> = {
+  holiday: "bg-orange-100 text-orange-800",
+  exam: "bg-purple-100 text-purple-800",
 };
 
 export default function AdminEvents() {
@@ -43,6 +48,9 @@ export default function AdminEvents() {
     days_of_week: [] as number[],
   });
 
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockForm, setBlockForm] = useState({ label: "", block_type: "holiday", start_date: "", end_date: "" });
+
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => (await api.teams.list()).data || [],
@@ -54,82 +62,86 @@ export default function AdminEvents() {
     staleTime: 10_000,
   });
 
+  const { data: blockedDates = [] } = useQuery({
+    queryKey: ["blocked-dates"],
+    queryFn: async () => (await api.blockedDates.list()).data || [],
+  });
+
   const resetForm = () => {
     setForm({ team_id: "", event_type: "practice", title: "", description: "", court: "", start_time: "", end_time: "" });
     setEditing(null);
   };
 
   const resetRecurForm = () => {
-    setRecurForm({
-      team_id: "", event_type: "practice", title: "", description: "", court: "",
-      start_date: "", end_date: "",
-      start_hour: "9", start_minute: "0", duration_minutes: "90",
-      days_of_week: [],
-    });
+    setRecurForm({ team_id: "", event_type: "practice", title: "", description: "", court: "", start_date: "", end_date: "", start_hour: "9", start_minute: "0", duration_minutes: "90", days_of_week: [] });
   };
 
   const createMutation = useMutation({
     mutationFn: () => api.events.create({ ...form, team_id: Number(form.team_id) }),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
-      toast({ title: "Event created" });
-      setOpen(false);
-      resetForm();
+      const displaced = res?.data?.displaced;
+      if (displaced) {
+        toast({
+          title: "Event created — court reassigned",
+          description: `'${displaced.displaced_event_title}' (priority ${displaced.displaced_priority}) was displaced. Your team has priority ${displaced.incoming_priority}.`,
+        });
+      } else {
+        toast({ title: "Event created" });
+      }
+      setOpen(false); resetForm();
     },
     onError: (e: any) => toast({ title: "Conflict", description: e.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
     mutationFn: () => api.events.update(editing.id, { ...form, team_id: Number(form.team_id) }),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
-      toast({ title: "Event updated" });
-      setOpen(false);
-      resetForm();
+      const displaced = res?.data?.displaced;
+      if (displaced) {
+        toast({
+          title: "Event updated — court reassigned",
+          description: `'${displaced.displaced_event_title}' (priority ${displaced.displaced_priority}) was displaced from this slot.`,
+        });
+      } else {
+        toast({ title: "Event updated" });
+      }
+      setOpen(false); resetForm();
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.events.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["all-events"] });
-      toast({ title: "Event deleted" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["all-events"] }); toast({ title: "Event deleted" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteSeriesMutation = useMutation({
     mutationFn: (ruleId: number) => api.events.deleteRecurringSeries(ruleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["all-events"] });
-      toast({ title: "Recurring series deleted" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["all-events"] }); toast({ title: "Recurring series deleted" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const createRecurMutation = useMutation({
-    mutationFn: () =>
-      api.events.createRecurring({
-        team_id: Number(recurForm.team_id),
-        event_type: recurForm.event_type,
-        title: recurForm.title.trim(),
-        description: recurForm.description || undefined,
-        court: recurForm.court.trim(),
-        start_date: recurForm.start_date,
-        end_date: recurForm.end_date,
-        days_of_week: recurForm.days_of_week,
-        start_hour: Number(recurForm.start_hour),
-        start_minute: Number(recurForm.start_minute),
-        duration_minutes: Number(recurForm.duration_minutes),
-      }),
+    mutationFn: () => api.events.createRecurring({
+      team_id: Number(recurForm.team_id), event_type: recurForm.event_type,
+      title: recurForm.title.trim(), description: recurForm.description || undefined,
+      court: recurForm.court.trim(), start_date: recurForm.start_date, end_date: recurForm.end_date,
+      days_of_week: recurForm.days_of_week, start_hour: Number(recurForm.start_hour),
+      start_minute: Number(recurForm.start_minute), duration_minutes: Number(recurForm.duration_minutes),
+    }),
     onSuccess: (res: any) => {
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
       const d = res.data;
       const skipped = d.conflicts_skipped?.length || 0;
+      const blockedSkipped = d.conflicts_skipped?.filter((s: any) => s.reason?.type === "blocked").length || 0;
       toast({
         title: `Series created: ${d.events_created} event(s)`,
-        description: skipped > 0 ? `${skipped} occurrence(s) skipped due to conflicts.` : undefined,
+        description: skipped > 0
+          ? `${skipped} occurrence(s) skipped (${blockedSkipped} on holidays/exams, ${skipped - blockedSkipped} conflicts).`
+          : undefined,
       });
       setRecurOpen(false);
       resetRecurForm();
@@ -137,26 +149,33 @@ export default function AdminEvents() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const createBlockMutation = useMutation({
+    mutationFn: () => api.blockedDates.create(blockForm),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["blocked-dates"] });
+      toast({ title: "Blocked period added" });
+      setBlockOpen(false);
+      setBlockForm({ label: "", block_type: "holiday", start_date: "", end_date: "" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteBlockMutation = useMutation({
+    mutationFn: (id: number) => api.blockedDates.delete(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["blocked-dates"] }); toast({ title: "Blocked period removed" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const handleEdit = (event: any) => {
     setEditing(event);
-    setForm({
-      team_id: String(event.team_id),
-      event_type: event.event_type,
-      title: event.title,
-      description: event.description || "",
-      court: event.court || "",
-      start_time: event.start_time?.slice(0, 16) || "",
-      end_time: event.end_time?.slice(0, 16) || "",
-    });
+    setForm({ team_id: String(event.team_id), event_type: event.event_type, title: event.title, description: event.description || "", court: event.court || "", start_time: event.start_time?.slice(0, 16) || "", end_time: event.end_time?.slice(0, 16) || "" });
     setOpen(true);
   };
 
   const toggleDay = (d: number) => {
     setRecurForm(p => ({
       ...p,
-      days_of_week: p.days_of_week.includes(d)
-        ? p.days_of_week.filter(x => x !== d)
-        : [...p.days_of_week, d],
+      days_of_week: p.days_of_week.includes(d) ? p.days_of_week.filter(x => x !== d) : [...p.days_of_week, d],
     }));
   };
 
@@ -179,6 +198,72 @@ export default function AdminEvents() {
           <p className="text-muted-foreground">{(events as any[]).length} total events</p>
         </div>
         <div className="flex gap-2">
+          {/* Blocked dates dialog */}
+          <Dialog open={blockOpen} onOpenChange={v => { setBlockOpen(v); if (!v) setBlockForm({ label: "", block_type: "holiday", start_date: "", end_date: "" }); }}>
+            <DialogTrigger asChild>
+              <Button variant="outline"><CalendarOff className="w-4 h-4 mr-2" /> Holidays & Exams</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>Holidays & Exam Periods</DialogTitle></DialogHeader>
+              <p className="text-xs text-muted-foreground -mt-2">Recurring practices will automatically skip dates within these periods.</p>
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                {(blockedDates as any[]).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-2">No blocked periods defined</p>
+                ) : (blockedDates as any[]).map((bd: any) => (
+                  <div key={bd.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      {bd.block_type === "holiday"
+                        ? <Palmtree className="w-4 h-4 text-orange-500" />
+                        : <GraduationCap className="w-4 h-4 text-purple-500" />}
+                      <span className="font-medium">{bd.label}</span>
+                      <Badge variant="secondary" className={blockTypeColor[bd.block_type] || ""}>{bd.block_type}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                      <span>{bd.start_date} → {bd.end_date}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                        onClick={() => deleteBlockMutation.mutate(bd.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-sm font-medium">Add Period</p>
+                <div>
+                  <Label className="text-xs">Label</Label>
+                  <Input value={blockForm.label} onChange={e => setBlockForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Christmas Break" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs">Type</Label>
+                    <Select value={blockForm.block_type} onValueChange={v => setBlockForm(p => ({ ...p, block_type: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="holiday">Holiday</SelectItem>
+                        <SelectItem value="exam">Exam Period</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Start Date</Label>
+                    <Input type="date" value={blockForm.start_date} onChange={e => setBlockForm(p => ({ ...p, start_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">End Date</Label>
+                    <Input type="date" value={blockForm.end_date} onChange={e => setBlockForm(p => ({ ...p, end_date: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => createBlockMutation.mutate()}
+                  disabled={createBlockMutation.isPending || !blockForm.label.trim() || !blockForm.start_date || !blockForm.end_date}>
+                  Add Period
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {/* Recurring series dialog */}
           <Dialog open={recurOpen} onOpenChange={v => { setRecurOpen(v); if (!v) resetRecurForm(); }}>
             <DialogTrigger asChild>
@@ -186,6 +271,11 @@ export default function AdminEvents() {
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Create Recurring Event Series</DialogTitle></DialogHeader>
+              {(blockedDates as any[]).length > 0 && (
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Occurrences on {(blockedDates as any[]).length} blocked period(s) will be skipped automatically.
+                </p>
+              )}
               <div className="space-y-4 py-4">
                 <div><Label>Title</Label><Input value={recurForm.title} onChange={e => setRecurForm(p => ({ ...p, title: e.target.value }))} /></div>
                 <div><Label>Description</Label><Textarea value={recurForm.description} onChange={e => setRecurForm(p => ({ ...p, description: e.target.value }))} /></div>
@@ -217,9 +307,7 @@ export default function AdminEvents() {
                     {DAY_LABELS.map((label, idx) => (
                       <button key={idx} type="button" onClick={() => toggleDay(idx)}
                         className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                          recurForm.days_of_week.includes(idx)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-muted text-muted-foreground border-border"
+                          recurForm.days_of_week.includes(idx) ? "bg-primary text-primary-foreground border-primary" : "bg-muted text-muted-foreground border-border"
                         }`}>
                         {label}
                       </button>
@@ -248,14 +336,8 @@ export default function AdminEvents() {
                 </div>
               </div>
               <DialogFooter>
-                <Button
-                  onClick={() => createRecurMutation.mutate()}
-                  disabled={
-                    createRecurMutation.isPending ||
-                    !recurForm.team_id || !recurForm.title.trim() || !recurForm.court.trim() ||
-                    !recurForm.start_date || !recurForm.end_date || recurForm.days_of_week.length === 0
-                  }
-                >
+                <Button onClick={() => createRecurMutation.mutate()}
+                  disabled={createRecurMutation.isPending || !recurForm.team_id || !recurForm.title.trim() || !recurForm.court.trim() || !recurForm.start_date || !recurForm.end_date || recurForm.days_of_week.length === 0}>
                   {createRecurMutation.isPending ? "Creating…" : "Create Series"}
                 </Button>
               </DialogFooter>
@@ -313,6 +395,12 @@ export default function AdminEvents() {
         <TabsList>
           <TabsTrigger value="all">All Events ({(events as any[]).length})</TabsTrigger>
           <TabsTrigger value="series">Recurring Series ({seriesMap.size})</TabsTrigger>
+          <TabsTrigger value="blocked">
+            Holidays & Exams
+            {(blockedDates as any[]).length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{(blockedDates as any[]).length}</Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-4 space-y-3">
@@ -325,23 +413,15 @@ export default function AdminEvents() {
                     <p className="font-medium">{event.title}</p>
                     <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
                     {event.team && <Badge variant="outline">{event.team.name}</Badge>}
-                    {event.recurring_rule_id && (
-                      <Badge variant="outline" className="text-xs gap-1">
-                        <RefreshCw className="w-3 h-3" /> recurring
-                      </Badge>
-                    )}
+                    {event.recurring_rule_id && <Badge variant="outline" className="text-xs gap-1"><RefreshCw className="w-3 h-3" /> recurring</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {event.court} • {event.start_time ? format(parseUTC(event.start_time), "MMM d, h:mm a") : "—"} – {event.end_time ? format(parseUTC(event.end_time), "h:mm a") : "—"}
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  {!event.recurring_rule_id && (
-                    <Button size="icon" variant="ghost" onClick={() => handleEdit(event)}><Edit className="w-4 h-4" /></Button>
-                  )}
-                  <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(event.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
+                  {!event.recurring_rule_id && <Button size="icon" variant="ghost" onClick={() => handleEdit(event)}><Edit className="w-4 h-4" /></Button>}
+                  <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(event.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                 </div>
               </CardContent>
             </Card>
@@ -374,7 +454,7 @@ export default function AdminEvents() {
                     {sorted.map((ev: any) => (
                       <div key={ev.id} className="flex items-center justify-between rounded bg-muted/50 px-3 py-1.5">
                         <span>{format(parseUTC(ev.start_time), "EEE, MMM d • h:mm a")} – {format(parseUTC(ev.end_time), "h:mm a")}</span>
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => deleteMutation.mutate(ev.id)} title="Remove this occurrence">
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => deleteMutation.mutate(ev.id)}>
                           <Trash2 className="w-3 h-3 text-destructive" />
                         </Button>
                       </div>
@@ -384,6 +464,34 @@ export default function AdminEvents() {
               </Card>
             );
           })}
+        </TabsContent>
+
+        <TabsContent value="blocked" className="mt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Recurring practices automatically skip these periods.</p>
+            <Button size="sm" onClick={() => setBlockOpen(true)}><Plus className="w-3 h-3 mr-1" /> Add Period</Button>
+          </div>
+          {(blockedDates as any[]).length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No holidays or exam periods defined</p>
+          ) : (blockedDates as any[]).map((bd: any) => (
+            <Card key={bd.id}>
+              <CardContent className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  {bd.block_type === "holiday"
+                    ? <Palmtree className="w-5 h-5 text-orange-500" />
+                    : <GraduationCap className="w-5 h-5 text-purple-500" />}
+                  <div>
+                    <p className="font-medium text-sm">{bd.label}</p>
+                    <p className="text-xs text-muted-foreground">{bd.start_date} → {bd.end_date}</p>
+                  </div>
+                  <Badge variant="secondary" className={blockTypeColor[bd.block_type] || ""}>{bd.block_type}</Badge>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => deleteBlockMutation.mutate(bd.id)}>
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </TabsContent>
       </Tabs>
     </div>

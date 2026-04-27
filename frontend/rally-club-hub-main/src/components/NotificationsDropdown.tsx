@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, CalendarClock, CreditCard, FileText, Megaphone, AlertTriangle, Clock } from "lucide-react";
+import { Bell, CheckCheck, CalendarClock, CreditCard, FileText, Megaphone, AlertTriangle, Clock, ShieldAlert } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ const notifIcon: Record<string, { icon: React.ElementType; color: string }> = {
   registration:    { icon: FileText,      color: "text-purple-500" },
   announcement:    { icon: Megaphone,     color: "text-indigo-500" },
   warning:         { icon: AlertTriangle, color: "text-yellow-500" },
+  event_displaced: { icon: ShieldAlert,   color: "text-red-600"    },
 };
 
 function NotifIcon({ type }: { type: string }) {
