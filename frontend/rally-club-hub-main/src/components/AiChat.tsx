@@ -3,7 +3,8 @@ import { Bot, X, Send, Loader2, ChevronDown, GripHorizontal } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import api, { type AiPendingConfirmation } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -26,10 +27,12 @@ const MAX_H = Math.round(window.innerHeight * 0.9);
 
 export function AiChat() {
   const { role } = useAuth();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<AiPendingConfirmation | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -73,8 +76,8 @@ export function AiChat() {
 
   if (!role || !["coach", "parent", "admin", "player"].includes(role)) return null;
 
-  async function send() {
-    const text = input.trim();
+  async function send(overrideText?: string) {
+    const text = (overrideText ?? input).trim();
     if (!text || loading) return;
 
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
@@ -83,7 +86,23 @@ export function AiChat() {
     setLoading(true);
 
     try {
-      const res = await api.ai.chat(newMessages);
+      const res = await api.ai.chat(newMessages, pendingConfirmation);
+      const hasEventWrite = (res.data.write_actions || []).some((action: any) =>
+        ["event_created", "event_updated", "event_deleted"].includes(action?.type),
+      );
+      if (hasEventWrite) {
+        queryClient.invalidateQueries({ queryKey: ["my-events"] });
+        queryClient.invalidateQueries({ queryKey: ["my-calendar"] });
+        queryClient.invalidateQueries({ queryKey: ["all-events"] });
+        queryClient.invalidateQueries({ queryKey: ["courts"] });
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey[0];
+            return key === "all-events-week" || key === "child-schedule";
+          },
+        });
+      }
+      setPendingConfirmation(res.data.pending_confirmation || null);
       setMessages([...newMessages, { role: "assistant", content: res.data.reply }]);
     } catch (err: any) {
       setMessages([
@@ -208,7 +227,34 @@ export function AiChat() {
           </ScrollArea>
 
           {/* Input */}
-          <div className="border-t border-orange-500/20 p-3 flex gap-2 items-end flex-shrink-0">
+          <div className="border-t border-orange-500/20 p-3 space-y-2 flex-shrink-0">
+            {pendingConfirmation && (
+              <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2">
+                <p className="text-xs font-medium text-foreground">{pendingConfirmation.summary}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => send("confirm")}
+                    disabled={loading}
+                    className="h-8 bg-orange-500 hover:bg-orange-600 text-black"
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => send("cancel")}
+                    disabled={loading}
+                    className="h-8 border-orange-500/30"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2 items-end">
             <Textarea
               ref={textareaRef}
               value={input}
@@ -221,12 +267,13 @@ export function AiChat() {
             />
             <Button
               size="icon"
-              onClick={send}
+              onClick={() => send()}
               disabled={!input.trim() || loading}
               className="bg-orange-500 hover:bg-orange-600 text-black flex-shrink-0 h-10 w-10"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
+            </div>
           </div>
         </div>
       )}

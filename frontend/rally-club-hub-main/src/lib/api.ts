@@ -322,11 +322,20 @@ export const community = {
 };
 
 // ── AI Chat ─────────────────────────────────────────────────
+export type AiPendingConfirmation = {
+  tool: string;
+  inputs: Record<string, any>;
+  summary: string;
+};
+
 export const ai = {
-  chat: (messages: Array<{ role: string; content: string }>) =>
-    request<{ success: boolean; data: { reply: string; role: string } }>("/ai/chat", {
+  chat: (messages: Array<{ role: string; content: string }>, pendingConfirmation?: AiPendingConfirmation | null) =>
+    request<{ success: boolean; data: { reply: string; role: string; write_actions?: any[]; tool_results?: any[]; pending_confirmation?: AiPendingConfirmation } }>("/ai/chat", {
       method: "POST",
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({
+        messages,
+        ...(pendingConfirmation ? { pending_confirmation: pendingConfirmation } : {}),
+      }),
     }),
 };
 

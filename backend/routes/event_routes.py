@@ -18,7 +18,7 @@ def _parse_dt(s):
     """Parse ISO datetime string to datetime object."""
     if not s:
         return None
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=None)
 
 
 def _find_blocked_date_for_range(start_dt, end_dt):

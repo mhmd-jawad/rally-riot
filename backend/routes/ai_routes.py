@@ -1,6 +1,7 @@
 """AI Chat Assistant — OpenAI function calling with full role coverage."""
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, g, current_app
@@ -10,12 +11,16 @@ from auth import authenticate
 from models import (
     Event, Team, TeamCoach, TeamPlayer, ParentChildLink,
     Invoice, AttendanceRecord, RSVP, Announcement, Registration, User,
+    BlockedDate,
 )
 from extensions import db
 from services import OverlapService, NotificationService
 
 logger = logging.getLogger(__name__)
 ai_bp = Blueprint("ai", __name__)
+VALID_EVENT_TYPES = ("practice", "match", "tryout", "tournament")
+EVENT_WRITE_TOOL_NAMES = {"book_event", "reschedule_event", "delete_event"}
+ADMIN_CONFIRMATION_TOOL_NAMES = EVENT_WRITE_TOOL_NAMES
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -246,7 +251,266 @@ _TOOLS_BY_ROLE = {
 def _parse_dt(s):
     if not s:
         return None
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return parsed.replace(tzinfo=None)
+
+
+def _find_blocked_date_for_range(start_dt, end_dt):
+    current = start_dt.date()
+    end_date = end_dt.date()
+    while current <= end_date:
+        current_iso = current.isoformat()
+        blocked = BlockedDate.query.filter(
+            BlockedDate.start_date <= current_iso,
+            BlockedDate.end_date >= current_iso,
+        ).first()
+        if blocked:
+            return blocked
+        current += timedelta(days=1)
+    return None
+
+
+def _suggest_alternative_slots(
+    court,
+    team_id,
+    duration_minutes,
+    preferred_start=None,
+    coach_user_id=None,
+    exclude_event_id=None,
+    limit=6,
+):
+    if not court:
+        return []
+    try:
+        team_id = int(team_id)
+        duration = max(30, int(duration_minutes or 60))
+    except (TypeError, ValueError):
+        return []
+
+    if isinstance(preferred_start, str):
+        try:
+            preferred_start = _parse_dt(preferred_start)
+        except (TypeError, ValueError):
+            preferred_start = None
+    preferred_start = preferred_start or datetime.utcnow()
+    base_date = preferred_start.date()
+    now = datetime.utcnow()
+    slots = []
+
+    for day_offset in range(7):
+        day = base_date + timedelta(days=day_offset)
+        slot = datetime.combine(day, datetime.min.time()).replace(hour=8)
+        close_time = slot.replace(hour=20)
+        while slot + timedelta(minutes=duration) <= close_time and len(slots) < limit:
+            slot_end = slot + timedelta(minutes=duration)
+            if (
+                slot >= now
+                and not _find_blocked_date_for_range(slot, slot_end)
+                and not OverlapService.check_conflicts(
+                    court=court,
+                    team_id=team_id,
+                    coach_user_id=coach_user_id,
+                    start_time=slot,
+                    end_time=slot_end,
+                    exclude_event_id=exclude_event_id,
+                )
+            ):
+                slots.append({"start_time": slot.isoformat(), "end_time": slot_end.isoformat()})
+            slot += timedelta(minutes=30)
+        if len(slots) >= limit:
+            break
+
+    return slots
+
+
+def _conflict_response_with_alternatives(
+    conflict,
+    court,
+    team_id,
+    start,
+    end,
+    coach_user_id,
+    exclude_event_id=None,
+):
+    duration_minutes = max(30, int((end - start).total_seconds() // 60))
+    alternatives = _suggest_alternative_slots(
+        court=court,
+        team_id=team_id,
+        duration_minutes=duration_minutes,
+        preferred_start=start,
+        coach_user_id=coach_user_id,
+        exclude_event_id=exclude_event_id,
+    )
+    message = conflict.get("message", "Requested time is unavailable.")
+    return {
+        "error": f"Requested time is unavailable. {message}",
+        "conflict": conflict,
+        "alternative_slots": alternatives,
+        "hint": (
+            "Use one of the alternative_slots for the booking."
+            if alternatives
+            else "No alternative slot was found in the next 7 days."
+        ),
+    }
+
+
+def _event_write_action(tool_name, result):
+    if not isinstance(result, dict) or not result.get("success"):
+        return None
+    event = result.get("event")
+    if tool_name == "book_event" and event:
+        return {"type": "event_created", "tool": tool_name, "event_id": event.get("id")}
+    if tool_name == "reschedule_event" and event:
+        return {"type": "event_updated", "tool": tool_name, "event_id": event.get("id")}
+    if tool_name == "delete_event":
+        return {"type": "event_deleted", "tool": tool_name, "event_id": result.get("event_id")}
+    return None
+
+
+def _latest_user_text(messages):
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            return str(message.get("content") or "")
+    return ""
+
+
+def _looks_like_event_write_intent(text):
+    lowered = text.lower()
+    patterns = (
+        r"\b(book|reserve)\b",
+        r"\b(create|add|set up)\b.*\b(event|practice|match|tryout|tournament|session|booking|court)\b",
+        r"\bschedule\s+(?:a|an|the|this|that)?\s*(event|practice|match|tryout|tournament|session|booking|court)\b",
+        r"\b(reschedule|move)\b.*\b(event|practice|match|tryout|tournament|session|booking|time)\b",
+        r"\bchange\b.*\b(event|practice|match|tryout|tournament|session|booking|time)\b",
+        r"\b(cancel|delete)\b.*\b(event|practice|match|tryout|tournament|session|booking)\b",
+    )
+    return any(re.search(pattern, lowered) for pattern in patterns)
+
+
+def _schedule_permission_message(role):
+    return (
+        f"Your role ({role}) cannot book, reschedule, or cancel events through RallyBot. "
+        "Only admins and coaches can modify the schedule."
+    )
+
+
+def _is_confirmation_acceptance(text):
+    lowered = text.strip().lower()
+    return lowered in {"confirm", "yes", "y", "proceed", "approve", "do it"} or lowered.startswith("confirm ")
+
+
+def _is_confirmation_rejection(text):
+    lowered = text.strip().lower()
+    return lowered in {"cancel", "no", "n", "stop", "never mind", "nevermind"} or lowered.startswith("cancel ")
+
+
+def _format_dt_for_confirmation(value):
+    try:
+        parsed = _parse_dt(value) if isinstance(value, str) else value
+        if parsed:
+            return parsed.strftime("%b %d, %Y at %I:%M %p").replace(" 0", " ")
+    except (TypeError, ValueError):
+        pass
+    return str(value or "unspecified time")
+
+
+def _admin_confirmation_required(user, tool_name):
+    return user.get("role") == "admin" and tool_name in ADMIN_CONFIRMATION_TOOL_NAMES
+
+
+def _build_admin_confirmation(tool_name, inputs):
+    inputs = dict(inputs or {})
+    if tool_name == "book_event":
+        team = Team.query.get(inputs.get("team_id")) if inputs.get("team_id") else None
+        summary = (
+            f"Confirm booking '{inputs.get('title', 'Untitled event')}' for "
+            f"{team.name if team else 'team ' + str(inputs.get('team_id', '?'))} on "
+            f"{inputs.get('court', 'an unspecified court')} from "
+            f"{_format_dt_for_confirmation(inputs.get('start_time'))} to "
+            f"{_format_dt_for_confirmation(inputs.get('end_time'))}."
+        )
+    elif tool_name == "reschedule_event":
+        event = Event.query.get(inputs.get("event_id")) if inputs.get("event_id") else None
+        summary = (
+            f"Confirm rescheduling '{event.title if event else 'event ' + str(inputs.get('event_id', '?'))}'"
+            f"{' to ' + inputs['court'] if inputs.get('court') else ''}"
+            f"{' from ' + _format_dt_for_confirmation(inputs['start_time']) if inputs.get('start_time') else ''}"
+            f"{' to ' + _format_dt_for_confirmation(inputs['end_time']) if inputs.get('end_time') else ''}."
+        )
+    elif tool_name == "delete_event":
+        event = Event.query.get(inputs.get("event_id")) if inputs.get("event_id") else None
+        if event:
+            summary = (
+                f"Confirm cancellation of '{event.title}' on {event.court} from "
+                f"{_format_dt_for_confirmation(event.start_time)} to "
+                f"{_format_dt_for_confirmation(event.end_time)}."
+            )
+        else:
+            summary = f"Confirm cancellation of event {inputs.get('event_id', '?')}."
+    else:
+        summary = f"Confirm {tool_name}."
+
+    return {
+        "tool": tool_name,
+        "inputs": inputs,
+        "summary": summary,
+    }
+
+
+def _format_alternative_slots(slots):
+    if not slots:
+        return ""
+    lines = []
+    for idx, slot in enumerate(slots[:3], start=1):
+        lines.append(
+            f"{idx}. {_format_dt_for_confirmation(slot.get('start_time'))} - "
+            f"{_format_dt_for_confirmation(slot.get('end_time'))}"
+        )
+    return "\n".join(lines)
+
+
+def _event_tool_reply(tool_name, result):
+    if result.get("success"):
+        event = result.get("event") or {}
+        if tool_name == "book_event":
+            return (
+                f"Confirmed. Booked '{event.get('title', 'the event')}' on "
+                f"{event.get('court', 'the court')} from "
+                f"{_format_dt_for_confirmation(event.get('start_time'))} to "
+                f"{_format_dt_for_confirmation(event.get('end_time'))}."
+            )
+        if tool_name == "reschedule_event":
+            return (
+                f"Confirmed. Rescheduled '{event.get('title', 'the event')}' to "
+                f"{event.get('court', 'the court')} from "
+                f"{_format_dt_for_confirmation(event.get('start_time'))} to "
+                f"{_format_dt_for_confirmation(event.get('end_time'))}."
+            )
+        if tool_name == "delete_event":
+            return "Confirmed. The event was cancelled."
+        return result.get("message", "Confirmed. The action was completed.")
+
+    if result.get("conflict"):
+        reply = result.get("error", "Requested time is unavailable.")
+        alternatives = _format_alternative_slots(result.get("alternative_slots") or [])
+        if alternatives:
+            reply += f"\n\nAvailable alternatives:\n{alternatives}"
+        return reply
+
+    return result.get("error", "I could not complete that request.")
+
+
+def _claims_event_write_success(text):
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in (
+        "successfully booked", "has been booked", "is booked", "i've booked", "i have booked",
+        "successfully scheduled", "has been scheduled", "is scheduled", "i've scheduled", "i have scheduled",
+        "successfully reserved", "has been reserved", "is reserved", "i've reserved", "i have reserved",
+        "successfully created", "has been created", "i've created", "i have created",
+        "successfully rescheduled", "has been rescheduled", "is rescheduled", "i've rescheduled", "i have rescheduled",
+        "successfully moved", "has been moved", "i've moved", "i have moved",
+        "successfully updated", "has been updated", "i've updated", "i have updated",
+    ))
 
 
 def _execute_tool(name, inputs, user):
@@ -383,32 +647,88 @@ def _execute_tool(name, inputs, user):
     if name == "book_event":
         if role not in ("coach", "admin"):
             return {"error": "Only coaches and admins can create events."}
-        team_id = inputs.get("team_id")
+        try:
+            team_id = int(inputs.get("team_id"))
+        except (TypeError, ValueError):
+            return {"error": "team_id is required and must be an integer."}
+        team = Team.query.get(team_id)
+        if not team:
+            return {"error": f"Team {team_id} not found."}
+        event_type = inputs.get("event_type", "practice")
+        if event_type not in VALID_EVENT_TYPES:
+            return {"error": f"event_type must be one of {', '.join(VALID_EVENT_TYPES)}."}
+        title = (inputs.get("title") or "").strip()
+        if not title:
+            return {"error": "title is required."}
         court   = (inputs.get("court") or "").strip()
+        if not court:
+            return {"error": "court is required."}
         if role == "coach" and not TeamCoach.query.filter_by(team_id=team_id, coach_user_id=uid).first():
             return {"error": f"You are not assigned as coach for team {team_id}."}
         try:
             start = _parse_dt(inputs["start_time"])
             end   = _parse_dt(inputs["end_time"])
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             return {"error": "Invalid datetime. Use ISO 8601."}
         if start >= end:
             return {"error": "start_time must be before end_time."}
+        blocked = _find_blocked_date_for_range(start, end)
+        if blocked:
+            return {
+                "error": (
+                    f"Reservations are disabled on blocked dates. Conflicts with '{blocked.label}' "
+                    f"({blocked.block_type}) from {blocked.start_date} to {blocked.end_date}."
+                )
+            }
         conflict = OverlapService.check_conflicts(court=court, team_id=team_id,
                                                   coach_user_id=uid, start_time=start, end_time=end)
+        displaced_event_info = None
         if conflict:
-            return {"conflict": conflict, "hint": "Call get_alternative_slots to find open time slots."}
+            if conflict["type"] == "court":
+                incoming_priority = team.priority_level if team else 1
+                conflicting_priority = conflict.get("conflicting_team_priority", 1)
+                if incoming_priority > conflicting_priority:
+                    conflicting_event = Event.query.get(conflict["conflicting_event_id"])
+                    if conflicting_event:
+                        displaced_event_info = {
+                            "displaced_event_id": conflicting_event.id,
+                            "displaced_event_title": conflicting_event.title,
+                            "displaced_team_id": conflicting_event.team_id,
+                            "incoming_priority": incoming_priority,
+                            "displaced_priority": conflicting_priority,
+                        }
+                        OverlapService.displace_event(
+                            conflicting_event,
+                            "Court booking displaced by higher-priority team",
+                            (
+                                f"Your event '{conflicting_event.title}' on "
+                                f"{conflicting_event.start_time.strftime('%b %d at %H:%M')} at "
+                                f"{conflicting_event.court} was displaced by '{title}' "
+                                f"(priority {incoming_priority} > {conflicting_priority}). Please reschedule."
+                            ),
+                        )
+                else:
+                    return _conflict_response_with_alternatives(
+                        conflict, court, team_id, start, end, uid
+                    )
+            else:
+                return _conflict_response_with_alternatives(
+                    conflict, court, team_id, start, end, uid
+                )
         evt = Event(
             team_id=team_id, created_by_user_id=uid,
-            event_type=inputs.get("event_type", "practice"),
-            title=(inputs.get("title") or "").strip(),
+            event_type=event_type,
+            title=title,
             description=inputs.get("description"),
             court=court, start_time=start, end_time=end,
         )
         db.session.add(evt)
         db.session.commit()
         logger.info("AI book_event: created event %d (user %d)", evt.id, uid)
-        return {"success": True, "event": evt.to_dict(include_relations=True)}
+        result = {"success": True, "event": evt.to_dict(include_relations=True)}
+        if displaced_event_info:
+            result["displaced"] = displaced_event_info
+        return result
 
     # ── reschedule_event ───────────────────────────────────────
     if name == "reschedule_event":
@@ -419,47 +739,114 @@ def _execute_tool(name, inputs, user):
             return {"error": "Event not found."}
         if role == "coach" and not TeamCoach.query.filter_by(team_id=evt.team_id, coach_user_id=uid).first():
             return {"error": "You are not the coach of this team."}
-        new_start = _parse_dt(inputs.get("start_time")) or evt.start_time
-        new_end   = _parse_dt(inputs.get("end_time"))   or evt.end_time
-        new_court = inputs.get("court") or evt.court
+        old_duration = evt.end_time - evt.start_time
+        has_new_start = bool(inputs.get("start_time"))
+        has_new_end = bool(inputs.get("end_time"))
+        try:
+            new_start = _parse_dt(inputs.get("start_time")) if has_new_start else evt.start_time
+            new_end = _parse_dt(inputs.get("end_time")) if has_new_end else None
+        except (TypeError, ValueError):
+            return {"error": "Invalid datetime. Use ISO 8601."}
+        if has_new_start and not has_new_end:
+            new_end = new_start + old_duration
+        elif not new_end:
+            new_end = evt.end_time
+        new_court = (inputs.get("court") or evt.court).strip()
         if new_start >= new_end:
             return {"error": "start_time must be before end_time."}
+        blocked = _find_blocked_date_for_range(new_start, new_end)
+        if blocked:
+            return {
+                "error": (
+                    f"Reservations are disabled on blocked dates. Conflicts with '{blocked.label}' "
+                    f"({blocked.block_type}) from {blocked.start_date} to {blocked.end_date}."
+                )
+            }
         conflict = OverlapService.check_conflicts(court=new_court, team_id=evt.team_id,
                                                   coach_user_id=evt.created_by_user_id,
                                                   start_time=new_start, end_time=new_end,
                                                   exclude_event_id=evt.id)
+        displaced_event_info = None
         if conflict:
-            return {"conflict": conflict, "hint": "Call get_alternative_slots to find open time slots."}
-        if inputs.get("start_time"): evt.start_time = new_start
-        if inputs.get("end_time"):   evt.end_time   = new_end
-        if inputs.get("court"):      evt.court      = new_court
+            if conflict["type"] == "court":
+                incoming_team = Team.query.get(evt.team_id)
+                incoming_priority = incoming_team.priority_level if incoming_team else 1
+                conflicting_priority = conflict.get("conflicting_team_priority", 1)
+                if incoming_priority > conflicting_priority:
+                    conflicting_event = Event.query.get(conflict["conflicting_event_id"])
+                    if conflicting_event:
+                        displaced_event_info = {
+                            "displaced_event_id": conflicting_event.id,
+                            "displaced_event_title": conflicting_event.title,
+                            "displaced_team_id": conflicting_event.team_id,
+                            "incoming_priority": incoming_priority,
+                            "displaced_priority": conflicting_priority,
+                        }
+                        OverlapService.displace_event(
+                            conflicting_event,
+                            "Court booking displaced by higher-priority team",
+                            (
+                                f"Your event '{conflicting_event.title}' on "
+                                f"{conflicting_event.start_time.strftime('%b %d at %H:%M')} at "
+                                f"{conflicting_event.court} was displaced by '{evt.title}' "
+                                f"(priority {incoming_priority} > {conflicting_priority}). Please reschedule."
+                            ),
+                        )
+                else:
+                    return _conflict_response_with_alternatives(
+                        conflict, new_court, evt.team_id, new_start, new_end, evt.created_by_user_id,
+                        exclude_event_id=evt.id,
+                    )
+            else:
+                return _conflict_response_with_alternatives(
+                    conflict, new_court, evt.team_id, new_start, new_end, evt.created_by_user_id,
+                    exclude_event_id=evt.id,
+                )
+        if has_new_start:
+            evt.start_time = new_start
+        if has_new_start or has_new_end:
+            evt.end_time = new_end
+        if inputs.get("court"):
+            evt.court = new_court
         player_ids = [tp.player_user_id for tp in TeamPlayer.query.filter_by(team_id=evt.team_id).all()]
         if player_ids:
             NotificationService.notify_many(player_ids, "schedule_change",
                                             f"Event '{evt.title}' has been rescheduled.")
         db.session.commit()
         logger.info("AI reschedule_event: updated event %d (user %d)", evt.id, uid)
-        return {"success": True, "event": evt.to_dict(include_relations=True)}
+        result = {"success": True, "event": evt.to_dict(include_relations=True)}
+        if displaced_event_info:
+            result["displaced"] = displaced_event_info
+        return result
 
     # ── get_alternative_slots ──────────────────────────────────
     if name == "get_alternative_slots":
-        court    = inputs.get("court", "")
-        team_id  = inputs.get("team_id")
-        duration = int(inputs.get("duration_minutes", 60))
+        if role not in ("coach", "admin"):
+            return {"error": "Only coaches and admins can search booking alternatives."}
+        court = (inputs.get("court") or "").strip()
+        if not court:
+            return {"error": "court is required."}
+        try:
+            team_id = int(inputs.get("team_id"))
+            duration = int(inputs.get("duration_minutes", 60))
+        except (TypeError, ValueError):
+            return {"error": "team_id and duration_minutes must be valid numbers."}
+        if not Team.query.get(team_id):
+            return {"error": f"Team {team_id} not found."}
+        if role == "coach" and not TeamCoach.query.filter_by(team_id=team_id, coach_user_id=uid).first():
+            return {"error": f"You are not assigned as coach for team {team_id}."}
         preferred = inputs.get("preferred_date", datetime.utcnow().strftime("%Y-%m-%d"))
         try:
             base = datetime.fromisoformat(preferred).replace(hour=8, minute=0, second=0, microsecond=0)
         except Exception:
             base = datetime.utcnow().replace(hour=8, minute=0, second=0, microsecond=0)
-        slots = []
-        for day in range(7):
-            slot = base + timedelta(days=day)
-            while slot.hour < 20 and len(slots) < 6:
-                slot_end = slot + timedelta(minutes=duration)
-                if not OverlapService.check_conflicts(court=court, team_id=team_id,
-                                                      coach_user_id=uid, start_time=slot, end_time=slot_end):
-                    slots.append({"start_time": slot.isoformat(), "end_time": slot_end.isoformat()})
-                slot += timedelta(hours=1)
+        slots = _suggest_alternative_slots(
+            court=court,
+            team_id=team_id,
+            duration_minutes=duration,
+            preferred_start=base,
+            coach_user_id=uid,
+        )
         return {"available_slots": slots, "court": court, "duration_minutes": duration}
 
     # ── get_child_schedule ─────────────────────────────────────
@@ -646,9 +1033,10 @@ def _execute_tool(name, inputs, user):
         if role == "coach" and not TeamCoach.query.filter_by(team_id=evt.team_id, coach_user_id=uid).first():
             return {"error": "You are not the coach of this team."}
         title = evt.title
+        event_id = evt.id
         db.session.delete(evt)
         db.session.commit()
-        return {"success": True, "message": f"Event '{title}' has been deleted."}
+        return {"success": True, "event_id": event_id, "message": f"Event '{title}' has been deleted."}
 
     # ── update_registration_status ─────────────────────────────
     if name == "update_registration_status":
@@ -688,7 +1076,11 @@ def _system_prompt(user):
         "NEVER say an action was completed if the tool returned an error or if you did not call a tool.\n"
         "8. CRITICAL: If the user asks you to do something you have no tool for, say explicitly: "
         "'I don't have the ability to [action] through this chat. Please use the platform interface instead.' "
-        "Never pretend to perform an action without a successful tool call.\n\n"
+        "Never pretend to perform an action without a successful tool call.\n"
+        "9. Only admins and coaches may book, reschedule, or cancel events. Parents and players must be told "
+        "that only admins and coaches can modify the schedule.\n"
+        "10. Admin booking, rescheduling, and cancellation requests require confirmation before execution. "
+        "Ask the admin to confirm when the system requests it; do not claim the change happened before confirmation.\n\n"
     )
 
     tool_docs = {
@@ -747,27 +1139,68 @@ def _system_prompt(user):
 @ai_bp.route("/chat", methods=["POST"])
 @authenticate
 def chat():
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return api_response.server_error("openai package not installed.")
-
     data     = request.get_json(silent=True) or {}
     messages = data.get("messages")
     if not messages or not isinstance(messages, list):
         return api_response.bad_request("'messages' array is required.")
 
-    user  = g.user
+    user = g.user
     tools = _TOOLS_BY_ROLE.get(user["role"], [])
     if not tools:
         return api_response.bad_request("AI chat is not available for your role.")
+
+    latest_user_text = _latest_user_text(messages)
+    tool_results = []
+    write_actions = []
+
+    def response_payload(reply, pending_confirmation=None):
+        payload = {
+            "reply": reply,
+            "role": "assistant",
+            "tool_results": tool_results,
+            "write_actions": write_actions,
+        }
+        if pending_confirmation:
+            payload["pending_confirmation"] = pending_confirmation
+        return payload
+
+    if user["role"] not in ("coach", "admin") and _looks_like_event_write_intent(latest_user_text):
+        return api_response.success(response_payload(_schedule_permission_message(user["role"])))
+
+    pending_confirmation = data.get("pending_confirmation")
+    if pending_confirmation:
+        if user["role"] != "admin":
+            return api_response.success(response_payload(_schedule_permission_message(user["role"])))
+        tool_name = pending_confirmation.get("tool")
+        inputs = pending_confirmation.get("inputs") or {}
+        if tool_name not in ADMIN_CONFIRMATION_TOOL_NAMES:
+            return api_response.success(response_payload("That pending confirmation is not a schedule action. No changes were made."))
+        if _is_confirmation_rejection(latest_user_text):
+            return api_response.success(response_payload("Cancelled. No schedule changes were made."))
+        if not _is_confirmation_acceptance(latest_user_text):
+            return api_response.success(response_payload(
+                "Please reply 'confirm' to execute this schedule change, or 'cancel' to leave it unchanged.",
+                pending_confirmation,
+            ))
+
+        result = _execute_tool(tool_name, inputs, user)
+        tool_results.append({"tool": tool_name, "result": result})
+        action = _event_write_action(tool_name, result)
+        if action:
+            write_actions.append(action)
+        return api_response.success(response_payload(_event_tool_reply(tool_name, result)))
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return api_response.server_error("openai package not installed.")
 
     api_key = current_app.config.get("OPENAI_API_KEY", "")
     if not api_key:
         return api_response.server_error("OPENAI_API_KEY is not configured.")
 
-    client      = OpenAI(api_key=api_key)
-    model       = current_app.config.get("OPENAI_MODEL", "gpt-4o-mini")
+    client = OpenAI(api_key=api_key)
+    model = current_app.config.get("OPENAI_MODEL", "gpt-4o-mini")
     oai_messages = [{"role": "system", "content": _system_prompt(user)}] + list(messages)
 
     for iteration in range(10):
@@ -776,7 +1209,21 @@ def chat():
         logger.debug("AI iter=%d finish=%s user=%d", iteration, choice.finish_reason, user["id"])
 
         if choice.finish_reason == "stop":
-            return api_response.success({"reply": choice.message.content, "role": "assistant"})
+            reply = choice.message.content or ""
+            event_write_succeeded = any(
+                action.get("type") in ("event_created", "event_updated", "event_deleted")
+                for action in write_actions
+            )
+            if (
+                _looks_like_event_write_intent(latest_user_text)
+                and _claims_event_write_success(reply)
+                and not event_write_succeeded
+            ):
+                reply = (
+                    "I could not complete that scheduling request. No event was created or changed. "
+                    "Please include the team, court, start time, and end time, then try again."
+                )
+            return api_response.success(response_payload(reply))
 
         if choice.finish_reason == "tool_calls":
             oai_messages.append(choice.message)
@@ -786,10 +1233,26 @@ def chat():
                     inp = json.loads(tc.function.arguments)
                 except json.JSONDecodeError:
                     inp = {}
+                if _admin_confirmation_required(user, tc.function.name):
+                    pending = _build_admin_confirmation(tc.function.name, inp)
+                    result = {
+                        "confirmation_required": True,
+                        "tool": tc.function.name,
+                        "message": pending["summary"],
+                    }
+                    tool_results.append({"tool": tc.function.name, "result": result})
+                    return api_response.success(response_payload(
+                        f"{pending['summary']}\n\nReply 'confirm' to execute it, or 'cancel' to leave the schedule unchanged.",
+                        pending,
+                    ))
                 result = _execute_tool(tc.function.name, inp, user)
+                tool_results.append({"tool": tc.function.name, "result": result})
+                action = _event_write_action(tc.function.name, result)
+                if action:
+                    write_actions.append(action)
                 oai_messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
             continue
         break
 
     reply = getattr(choice.message, "content", None) or "I could not complete that request. Please try again."
-    return api_response.success({"reply": reply, "role": "assistant"})
+    return api_response.success(response_payload(reply))
