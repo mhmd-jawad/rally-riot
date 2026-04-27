@@ -22,7 +22,23 @@ def list_invoices():
     elif role == "player":
         invoices = Invoice.query.filter_by(player_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
     else:
-        invoices = Invoice.query.filter_by(parent_user_id=g.user["id"]).order_by(Invoice.created_at.desc()).all()
+        # Include invoices billed to the parent directly AND invoices for linked children
+        # (children who self-registered have parent_user_id = their own player ID)
+        child_ids = [
+            link.child_user_id
+            for link in ParentChildLink.query.filter_by(parent_user_id=g.user["id"]).all()
+        ]
+        invoices = (
+            Invoice.query
+            .filter(
+                or_(
+                    Invoice.parent_user_id == g.user["id"],
+                    Invoice.player_user_id.in_(child_ids) if child_ids else db.false(),
+                )
+            )
+            .order_by(Invoice.created_at.desc())
+            .all()
+        )
 
     rows = []
     total_amount = 0

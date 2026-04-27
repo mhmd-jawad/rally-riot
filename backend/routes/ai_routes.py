@@ -213,6 +213,48 @@ _T_UPDATE_REGISTRATION_STATUS = _tool(
     },
     ["registration_id", "status"],
 )
+_T_CREATE_TEAM = _tool(
+    "create_team",
+    "Create a new team. Optionally specify age_group (e.g. 'U16') and skill_level (e.g. 'intermediate').",
+    {
+        "name":        {"type": "string"},
+        "age_group":   {"type": "string"},
+        "skill_level": {"type": "string"},
+    },
+    ["name"],
+)
+_T_ASSIGN_COACH_TO_TEAM = _tool(
+    "assign_coach_to_team",
+    "Assign a coach user to a team. Use list_users(role='coach') to find coach IDs.",
+    {
+        "team_id":       {"type": "integer"},
+        "coach_user_id": {"type": "integer"},
+    },
+    ["team_id", "coach_user_id"],
+)
+_T_CREATE_USER = _tool(
+    "create_user",
+    "Create a new user account. Role must be one of: admin, coach, parent, player.",
+    {
+        "full_name": {"type": "string"},
+        "email":     {"type": "string"},
+        "password":  {"type": "string"},
+        "role":      {"type": "string", "enum": ["admin", "coach", "parent", "player"]},
+    },
+    ["full_name", "email", "password", "role"],
+)
+
+# ── Parent write ──────────────────────────────────────────────────────────────
+_T_RSVP_FOR_CHILD = _tool(
+    "rsvp_for_child",
+    "RSVP on behalf of your linked child for an event.",
+    {
+        "event_id":       {"type": "integer"},
+        "child_user_id":  {"type": "integer"},
+        "status":         {"type": "string", "enum": ["attending", "not_attending", "maybe"]},
+    },
+    ["event_id", "child_user_id", "status"],
+)
 
 
 _COACH_TOOLS = [
@@ -225,6 +267,7 @@ _COACH_TOOLS = [
 _PARENT_TOOLS = [
     _T_GET_CHILD_SCHEDULE, _T_GET_MY_CHILDREN,
     _T_CHECK_BALANCE, _T_GET_ANNOUNCEMENTS,
+    _T_RSVP_FOR_CHILD,
 ]
 _PLAYER_TOOLS = [
     _T_GET_MY_SCHEDULE, _T_GET_MY_TEAM,
@@ -234,6 +277,7 @@ _ADMIN_TOOLS = _COACH_TOOLS + [
     _T_GET_CHILD_SCHEDULE, _T_GET_MY_CHILDREN,
     _T_CHECK_BALANCE, _T_LIST_USERS, _T_LIST_REGISTRATIONS,
     _T_UPDATE_REGISTRATION_STATUS,
+    _T_CREATE_TEAM, _T_ASSIGN_COACH_TO_TEAM, _T_CREATE_USER,
 ]
 
 _TOOLS_BY_ROLE = {
@@ -968,6 +1012,34 @@ def _execute_tool(name, inputs, user):
                         "rate": f"{round(present / max(present+absent, 1) * 100)}%"},
         }
 
+    # ── rsvp_for_child (parent) ────────────────────────────────
+    if name == "rsvp_for_child":
+        if role != "parent":
+            return {"error": "Only parents can use rsvp_for_child."}
+        event_id = inputs.get("event_id")
+        child_id = inputs.get("child_user_id")
+        status   = inputs.get("status")
+        link = ParentChildLink.query.filter_by(parent_user_id=uid, child_user_id=child_id).first()
+        if not link:
+            return {"error": f"No child with ID {child_id} is linked to your account."}
+        evt = Event.query.get(event_id)
+        if not evt:
+            return {"error": f"Event {event_id} not found."}
+        if not TeamPlayer.query.filter_by(team_id=evt.team_id, player_user_id=child_id).first():
+            return {"error": "Your child is not a member of this event's team."}
+        existing = RSVP.query.filter_by(event_id=event_id, player_user_id=child_id).first()
+        if existing:
+            existing.status = status
+            existing.responded_by_user_id = uid
+        else:
+            db.session.add(RSVP(event_id=event_id, player_user_id=child_id,
+                                responded_by_user_id=uid, status=status))
+        db.session.commit()
+        child = User.query.get(child_id)
+        return {"success": True, "event": evt.title,
+                "child": child.full_name if child else str(child_id),
+                "rsvp_status": status}
+
     # ── list_users (admin) ─────────────────────────────────────
     if name == "list_users":
         if role != "admin":
@@ -1107,6 +1179,7 @@ def _system_prompt(user):
             "- get_child_schedule() → upcoming events for your children\n"
             "- get_announcements() → announcements from your child's coach\n"
             "- check_balance() → your invoices, amounts due, due dates\n"
+            "- rsvp_for_child(event_id, child_user_id, status) → RSVP for your child (attending / not_attending / maybe); call get_my_children first to get child_user_id\n"
         ),
         "player": (
             "## Your tools:\n"
@@ -1126,6 +1199,9 @@ def _system_prompt(user):
             "- list_users([role]) → all club members, filterable by role\n"
             "- list_registrations([status]) → registration submissions\n"
             "- update_registration_status(registration_id, status) → approve or reject a registration\n"
+            "- create_team(name, [age_group], [skill_level]) → create a new team\n"
+            "- assign_coach_to_team(team_id, coach_user_id) → assign a coach to a team; use list_users(role='coach') to find IDs\n"
+            "- create_user(full_name, email, password, role) → create a new user account\n"
         ),
     }
 

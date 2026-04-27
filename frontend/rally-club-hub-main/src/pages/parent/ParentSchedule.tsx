@@ -2,13 +2,31 @@ import { parseUTC } from "@/lib/utils";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin, Clock } from "lucide-react";
+import { Calendar, MapPin, Clock, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+
+const RSVP_LABELS: Record<string, string> = {
+  attending: "Accepted",
+  not_attending: "Declined",
+  maybe: "Maybe",
+};
+
+const RSVP_BADGE: Record<string, string> = {
+  attending: "bg-green-100 text-green-800",
+  not_attending: "bg-red-100 text-red-800",
+  maybe: "bg-yellow-100 text-yellow-800",
+};
+
+const RSVP_ICON: Record<string, any> = {
+  attending: CheckCircle2,
+  not_attending: XCircle,
+  maybe: HelpCircle,
+};
 
 export default function ParentSchedule() {
   const { toast } = useToast();
@@ -20,7 +38,6 @@ export default function ParentSchedule() {
     queryFn: async () => (await api.parentChild.list()).data || [],
   });
 
-  // Auto-select first child as soon as children load
   const effectiveChild = selectedChild || (children.length > 0 ? String((children[0] as any).child_user_id) : "");
 
   const { data: events = [], isLoading } = useQuery({
@@ -44,8 +61,8 @@ export default function ParentSchedule() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const upcomingEvents = events.filter((e: any) => parseUTC(e.start_time) >= new Date());
-  const pastEvents = events.filter((e: any) => parseUTC(e.start_time) < new Date());
+  const upcomingEvents = (events as any[]).filter((e: any) => parseUTC(e.start_time) >= new Date());
+  const pastEvents = (events as any[]).filter((e: any) => parseUTC(e.start_time) < new Date());
 
   const childId = effectiveChild ? Number(effectiveChild) : null;
 
@@ -56,7 +73,7 @@ export default function ParentSchedule() {
           <h1 className="text-2xl font-bold">Schedule</h1>
           <p className="text-muted-foreground">View and manage your child's schedule</p>
         </div>
-        {children.length > 1 && (
+        {(children as any[]).length > 1 && (
           <Select value={effectiveChild} onValueChange={setSelectedChild}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Select child" /></SelectTrigger>
             <SelectContent>
@@ -78,37 +95,59 @@ export default function ParentSchedule() {
               <p className="text-muted-foreground text-center py-4">No upcoming events</p>
             ) : (
               <div className="space-y-4">
-                {upcomingEvents.map((event: any) => (
-                  <Card key={event.id}>
-                    <CardContent className="py-4">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-muted-foreground" />
-                            <p className="font-medium">{event.title}</p>
-                            <Badge variant="outline">{event.event_type}</Badge>
+                {upcomingEvents.map((event: any) => {
+                  const currentRsvp: string | null = event.my_rsvp ?? null;
+                  const RsvpIcon = currentRsvp ? RSVP_ICON[currentRsvp] : null;
+                  return (
+                    <Card key={event.id}>
+                      <CardContent className="py-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <p className="font-medium">{event.title}</p>
+                              <Badge variant="outline">{event.event_type}</Badge>
+                              {event.team && <Badge variant="outline" className="text-xs">{event.team.name}</Badge>}
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(event.start_time), "MMM d, h:mm a")}</span>
+                            </div>
+                            {currentRsvp && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {RsvpIcon && <RsvpIcon className="w-3.5 h-3.5" />}
+                                <Badge variant="secondary" className={`text-xs ${RSVP_BADGE[currentRsvp]}`}>
+                                  {RSVP_LABELS[currentRsvp]}
+                                </Badge>
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{format(parseUTC(event.start_time), "MMM d, h:mm a")}</span>
-                          </div>
+                          {childId && (
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant={currentRsvp === "attending" ? "default" : "outline"}
+                                className={currentRsvp === "attending" ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                                disabled={rsvpMutation.isPending}
+                                onClick={() => rsvpMutation.mutate({ eventId: event.id, playerId: childId, status: "attending" })}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={currentRsvp === "not_attending" ? "destructive" : "ghost"}
+                                disabled={rsvpMutation.isPending}
+                                onClick={() => rsvpMutation.mutate({ eventId: event.id, playerId: childId, status: "not_attending" })}
+                              >
+                                Decline
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        {childId && (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline"
-                              onClick={() => rsvpMutation.mutate({ eventId: event.id, playerId: childId, status: "attending" })}>
-                              Accept
-                            </Button>
-                            <Button size="sm" variant="ghost"
-                              onClick={() => rsvpMutation.mutate({ eventId: event.id, playerId: childId, status: "not_attending" })}>
-                              Decline
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -120,9 +159,16 @@ export default function ParentSchedule() {
                 {pastEvents.slice(0, 5).map((event: any) => (
                   <Card key={event.id}>
                     <CardContent className="py-3">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm">{event.title}</p>
-                        <span className="text-xs text-muted-foreground">{format(parseUTC(event.start_time), "MMM d")}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm">{event.title}</p>
+                          <span className="text-xs text-muted-foreground">{format(parseUTC(event.start_time), "MMM d")}</span>
+                        </div>
+                        {event.my_rsvp && (
+                          <Badge variant="secondary" className={`text-xs ${RSVP_BADGE[event.my_rsvp] || ""}`}>
+                            {RSVP_LABELS[event.my_rsvp]}
+                          </Badge>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

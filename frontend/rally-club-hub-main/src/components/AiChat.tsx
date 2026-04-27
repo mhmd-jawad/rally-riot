@@ -15,7 +15,7 @@ interface Message {
 
 const ROLE_HINTS: Record<string, string> = {
   coach:  'Try: "Who\'s on my team?" or "Book Court A tomorrow at 3pm for 2 hours" or "Who RSVP\'d to Friday\'s match?"',
-  parent: 'Try: "What\'s my child\'s schedule?" or "What\'s my balance?" or "Any new announcements?"',
+  parent: 'Try: "What\'s my child\'s schedule?" or "RSVP yes for my child to Friday\'s practice" or "What\'s my balance?"',
   player: 'Try: "What are my upcoming events?" or "RSVP yes to tomorrow\'s practice" or "What\'s my attendance rate?"',
   admin:  'Try: "List all coaches" or "Show pending registrations" or "Check club-wide balance"',
 };

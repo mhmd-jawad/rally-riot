@@ -367,8 +367,26 @@ def my_calendar():
     if not team_ids:
         return api_response.success([])
 
+    from models import RSVP
     events = Event.query.filter(Event.team_id.in_(team_ids)).order_by(Event.start_time.asc()).all()
-    return api_response.success([e.to_dict(include_relations=True) for e in events])
+
+    rsvp_lookup: dict = {}
+    if g.user["role"] == "player":
+        for r in RSVP.query.filter_by(player_user_id=user_id).all():
+            rsvp_lookup[r.event_id] = r.status
+    elif g.user["role"] == "parent":
+        child_ids = [l.child_user_id for l in ParentChildLink.query.filter_by(parent_user_id=user_id).all()]
+        if child_ids:
+            for r in RSVP.query.filter(RSVP.player_user_id.in_(child_ids)).all():
+                if r.event_id not in rsvp_lookup:
+                    rsvp_lookup[r.event_id] = r.status
+
+    result = []
+    for e in events:
+        d = e.to_dict(include_relations=True)
+        d["my_rsvp"] = rsvp_lookup.get(e.id)
+        result.append(d)
+    return api_response.success(result)
 
 
 @event_bp.route("/courts", methods=["GET"])
@@ -572,10 +590,17 @@ def child_schedule(child_id):
         if not link:
             return api_response.forbidden("You are not linked to this child.")
 
+    from models import RSVP
     memberships = TeamPlayer.query.filter_by(player_user_id=child_id).all()
     team_ids = [m.team_id for m in memberships]
     if not team_ids:
         return api_response.success([])
 
     events = Event.query.filter(Event.team_id.in_(team_ids)).order_by(Event.start_time.asc()).all()
-    return api_response.success([e.to_dict(include_relations=True) for e in events])
+    rsvp_lookup = {r.event_id: r.status for r in RSVP.query.filter_by(player_user_id=child_id).all()}
+    result = []
+    for e in events:
+        d = e.to_dict(include_relations=True)
+        d["my_rsvp"] = rsvp_lookup.get(e.id)
+        result.append(d)
+    return api_response.success(result)

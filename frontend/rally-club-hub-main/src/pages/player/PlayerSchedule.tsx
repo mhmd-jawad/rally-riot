@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Calendar, MapPin, Clock } from "lucide-react";
+import { Calendar, MapPin, Clock, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -90,6 +90,22 @@ export default function PlayerSchedule() {
     tournament: "bg-orange-100 text-orange-800",
   };
 
+  const RSVP_BADGE: Record<string, string> = {
+    attending: "bg-green-100 text-green-800",
+    not_attending: "bg-red-100 text-red-800",
+    maybe: "bg-yellow-100 text-yellow-800",
+  };
+  const RSVP_LABELS: Record<string, string> = {
+    attending: "Going",
+    not_attending: "Not going",
+    maybe: "Maybe",
+  };
+  const RSVP_ICON: Record<string, any> = {
+    attending: CheckCircle2,
+    not_attending: XCircle,
+    maybe: HelpCircle,
+  };
+
   if (isLoading) return <div className="animate-pulse h-64 bg-muted rounded-xl" />;
 
   return (
@@ -120,46 +136,71 @@ export default function PlayerSchedule() {
           <p className="text-muted-foreground text-center py-4">No upcoming events</p>
         ) : (
           <div className="space-y-4">
-            {upcomingEvents.map((event: any) => (
-              <Card key={event.id}>
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Calendar className="w-4 h-4 text-muted-foreground" />
-                        <p className="font-medium">{event.title}</p>
-                        <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
-                        {event.team && (
-                          <Badge variant="outline" className="text-xs">{event.team.name}</Badge>
+            {upcomingEvents.map((event: any) => {
+              const currentRsvp: string | null = event.my_rsvp ?? null;
+              const RsvpIcon = currentRsvp ? RSVP_ICON[currentRsvp] : null;
+              return (
+                <Card key={event.id}>
+                  <CardContent className="py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <p className="font-medium">{event.title}</p>
+                          <Badge variant="secondary" className={typeColor[event.event_type] || ""}>{event.event_type}</Badge>
+                          {event.team && (
+                            <Badge variant="outline" className="text-xs">{event.team.name}</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {format(parseUTC(event.start_time), "MMM d, h:mm a")} – {format(parseUTC(event.end_time), "h:mm a")}
+                          </span>
+                        </div>
+                        {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
+                        {currentRsvp && (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {RsvpIcon && <RsvpIcon className="w-3.5 h-3.5" />}
+                            <Badge variant="secondary" className={`text-xs ${RSVP_BADGE[currentRsvp]}`}>
+                              {RSVP_LABELS[currentRsvp]}
+                            </Badge>
+                          </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.court || "TBD"}</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {format(parseUTC(event.start_time), "MMM d, h:mm a")} – {format(parseUTC(event.end_time), "h:mm a")}
-                        </span>
+                      <div className="flex gap-2 shrink-0 ml-4">
+                        <Button
+                          size="sm"
+                          variant={currentRsvp === "attending" ? "default" : "outline"}
+                          className={currentRsvp === "attending" ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                          disabled={rsvpMutation.isPending}
+                          onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "attending" })}
+                        >
+                          Going
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={currentRsvp === "maybe" ? "secondary" : "ghost"}
+                          disabled={rsvpMutation.isPending}
+                          onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "maybe" })}
+                        >
+                          Maybe
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={currentRsvp === "not_attending" ? "destructive" : "ghost"}
+                          disabled={rsvpMutation.isPending}
+                          onClick={() => handleCantGo(event.id)}
+                        >
+                          Can't go
+                        </Button>
                       </div>
-                      {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
                     </div>
-                    <div className="flex gap-2 shrink-0 ml-4">
-                      <Button size="sm" variant="outline"
-                        onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "attending" })}>
-                        Going
-                      </Button>
-                      <Button size="sm" variant="ghost"
-                        onClick={() => rsvpMutation.mutate({ eventId: event.id, status: "maybe" })}>
-                        Maybe
-                      </Button>
-                      <Button size="sm" variant="ghost"
-                        onClick={() => handleCantGo(event.id)}>
-                        Can't go
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
