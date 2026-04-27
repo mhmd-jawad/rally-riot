@@ -11,6 +11,15 @@ from extensions import db
 invoice_bp = Blueprint("invoices", __name__)
 
 
+def _parent_can_access(inv, parent_user_id: int) -> bool:
+    """Return True if the parent owns the invoice directly OR via a linked child."""
+    if inv.parent_user_id == parent_user_id:
+        return True
+    return ParentChildLink.query.filter_by(
+        parent_user_id=parent_user_id, child_user_id=inv.player_user_id
+    ).first() is not None
+
+
 @invoice_bp.route("/", methods=["GET"])
 @authenticate
 @authorize("parent", "admin", "player")
@@ -71,7 +80,7 @@ def get_invoice(invoice_id):
         return api_response.not_found("Invoice not found.")
 
     role = g.user["role"]
-    if role == "parent" and inv.parent_user_id != g.user["id"]:
+    if role == "parent" and not _parent_can_access(inv, g.user["id"]):
         return api_response.forbidden("Access denied.")
     if role == "player" and inv.player_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
@@ -88,7 +97,7 @@ def mark_paid(invoice_id):
         return api_response.not_found("Invoice not found.")
 
     role = g.user["role"]
-    if role == "parent" and inv.parent_user_id != g.user["id"]:
+    if role == "parent" and not _parent_can_access(inv, g.user["id"]):
         return api_response.forbidden("Access denied.")
     if role == "player" and inv.player_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
@@ -211,7 +220,7 @@ def get_installments(invoice_id):
     inv = Invoice.query.get(invoice_id)
     if not inv:
         return api_response.not_found("Invoice not found.")
-    if g.user["role"] == "parent" and inv.parent_user_id != g.user["id"]:
+    if g.user["role"] == "parent" and not _parent_can_access(inv, g.user["id"]):
         return api_response.forbidden("Access denied.")
     plan = InstallmentPlan.query.filter_by(invoice_id=invoice_id).first()
     if not plan:
@@ -231,7 +240,7 @@ def pay_installment(payment_id):
     inv = Invoice.query.get(plan.invoice_id)
 
     role = g.user["role"]
-    if role == "parent" and inv.parent_user_id != g.user["id"]:
+    if role == "parent" and not _parent_can_access(inv, g.user["id"]):
         return api_response.forbidden("Access denied.")
     if role == "player" and inv.player_user_id != g.user["id"]:
         return api_response.forbidden("Access denied.")
